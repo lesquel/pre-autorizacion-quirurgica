@@ -2,11 +2,18 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | 1.0 |
+| **Versión** | 1.1 |
 | **Fecha** | 2026-05-06 |
-| **Estado** | Aprobado — listo para implementación |
+| **Estado** | Aprobado — listo para implementación (v1 / hackathon) |
 | **Owner** | lesquel |
 | **Repositorio** | https://github.com/lesquel/pre-autorizacion-quirurgica |
+
+> **Cambios v1.1 respecto a v1.0:**
+> - LLM default: **DeepSeek** (`deepseek-chat`) reemplaza al hybrid Anthropic. Adapters preservados para swap de proveedor.
+> - Vision separada en su propio port (`VisionExtractor`) para PDFs.
+> - Decisión del agente expone explícitamente `rationale`, `confidence` y `evidence`.
+> - Storage de archivos: **filesystem local del servidor** detrás del port `FileStorage` (no S3/MinIO en v1).
+> - Eliminadas para v1: Evaluation Strategy (3.2), Observabilidad (4.5), Testing (4.6) y gates relacionados. Se reintroducen post-v1.
 
 ---
 
@@ -22,15 +29,17 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 
 **El sistema NUNCA auto-rechaza** — todo rechazo escala a juicio humano por responsabilidad legal y clínica.
 
+Toda decisión expone tres campos auditables: `rationale` (por qué decidió eso), `confidence` (qué tan seguro está) y `evidence` (citas concretas al informe y a la póliza usadas como base).
+
 ### 1.3 Success Criteria (KPIs)
 
 | # | KPI | Threshold |
 |---|---|---|
-| 1 | Latencia de respuesta | ≤ 10s (texto) / ≤ 20s (PDF). Reducción ≥ 95% vs flujo manual. |
-| 2 | Tasa de auto-resolución | ≥ 60% de casos resueltos sin intervención humana. |
-| 3 | Auditabilidad | 100% de las decisiones con trace completo, justificación y confidence score. |
+| 1 | Latencia de respuesta | ≤ 10s (texto) / ≤ 20s (PDF) como objetivo de diseño. |
+| 2 | Tasa de auto-resolución | ≥ 60% de casos resueltos sin intervención humana en la demo. |
+| 3 | Decisión justificada | 100% de las decisiones incluyen `rationale` + `confidence` (0..1) + `evidence` (citas al informe y a la cobertura). |
 | 4 | Seguridad clínica | **0% de rechazos automáticos**. Todo rechazo pasa por humano. |
-| 5 | Cost-per-case | ≤ $0.10 USD por caso procesado. |
+| 5 | Cost-per-case | ≤ $0.02 USD por caso (DeepSeek ~10× más barato que un stack Claude puro). |
 
 ---
 
@@ -51,7 +60,7 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 
 #### 2.1.3 Auditor Médico
 - Profesional de la salud que revisa casos escalados.
-- Necesita ver el trace completo del agente (qué hizo, por qué llegó a su mesa).
+- Necesita ver el `rationale`, `confidence` y `evidence` del agente, además del trace paso a paso.
 - Resuelve casos manualmente (aprobar/rechazar) con justificación clínica.
 - Necesita filtros por urgencia, fecha, motivo de escalamiento.
 
@@ -61,6 +70,7 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 - **US-H1**: Como personal del hospital, quiero subir un informe médico (texto o PDF) y recibir pre-autorización en menos de 20 segundos, para no demorar la programación quirúrgica.
 - **US-H2**: Como personal del hospital, quiero ver en vivo qué pasos ejecuta el agente, para saber cuánto falta y qué está validando.
 - **US-H3**: Como personal del hospital, quiero recibir una lista clara de documentos faltantes cuando aplica, sin tener que adivinar qué pide la aseguradora.
+- **US-H4**: Como personal del hospital, quiero ver la justificación y el nivel de confianza de la decisión, para entender por qué se aprobó, se pidieron documentos o se escaló.
 
 #### Aseguradora
 - **US-A1**: Como operador de la aseguradora, quiero crear y editar pólizas con sus coberturas, carencias y docs requeridos por procedimiento, para que el agente tenga las reglas correctas.
@@ -68,16 +78,16 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 
 #### Auditor
 - **US-AU1**: Como auditor médico, quiero ver una bandeja con todos los casos escalados ordenados por urgencia clínica.
-- **US-AU2**: Como auditor médico, quiero leer el razonamiento del agente y la traza paso a paso, para saber dónde dudó y por qué.
+- **US-AU2**: Como auditor médico, quiero leer el `rationale` del agente, ver su `confidence` y revisar la `evidence` (qué citó del informe y de la póliza), para evaluar la calidad de su razonamiento.
 - **US-AU3**: Como auditor médico, quiero resolver el caso (aprobar/rechazar) con mi justificación textual, que queda en el record permanente.
 
-### 2.3 Acceptance Criteria (MVP)
+### 2.3 Acceptance Criteria (v1)
 
 #### 2.3.1 Hospital — submission
 - [ ] Puede subir informe en texto libre o PDF (≤ 10 MB).
 - [ ] Recibe ID del caso inmediatamente (HTTP 202 Accepted).
 - [ ] Ve actualizaciones del agente en vivo vía Server-Sent Events (al menos: extracción → matching → validación → decisión).
-- [ ] Recibe el resultado final con: outcome, mensaje en español natural, justificación, confidence score, lista de docs faltantes (si aplica), o motivo de escalamiento.
+- [ ] Recibe el resultado final con: `outcome`, `mensaje` (español natural), `rationale`, `confidence`, `evidence[]`, `missing_docs[]` (si aplica), `escalation_reason` (si aplica).
 
 #### 2.3.2 Aseguradora — gestión de pólizas
 - [ ] CRUD completo de pólizas (número, paciente, plan, fechas, estado).
@@ -86,24 +96,27 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 
 #### 2.3.3 Auditor — bandeja y resolución
 - [ ] Bandeja con casos escalados, ordenados por fecha o motivo de escalamiento.
-- [ ] Vista de detalle del caso con: informe original, póliza relevante, trace completo del agente, motivo de escalamiento.
+- [ ] Vista de detalle del caso con: informe original, póliza relevante, **`rationale`**, **`confidence`**, **`evidence`**, trace completo del agente, motivo de escalamiento.
 - [ ] Acción de resolver: outcome (APPROVED/REJECTED) + mensaje + razonamiento + adjuntos opcionales.
 - [ ] Estado del caso pasa a `DECIDIDO` y el hospital lo ve vía SSE.
 
-#### 2.3.4 Calidad del sistema
-- [ ] Latencia p95 ≤ 10s (texto) / ≤ 20s (PDF).
-- [ ] Coverage de tests ≥ 80% en `domain/` y `application/`.
-- [ ] Cada respuesta (éxito o error) incluye `trace_id` correlacionable con logs estructurados.
-- [ ] Errores siguen formato RFC 7807 (Problem Details).
+#### 2.3.4 Calidad del sistema (v1)
+- [ ] Latencia objetivo p95 ≤ 10s (texto) / ≤ 20s (PDF) — validado por demo, sin gate automatizado.
+- [ ] Cada respuesta (éxito o error) incluye `trace_id` para correlación manual con logs.
+- [ ] Errores siguen formato consistente (RFC 7807 sugerido, no obligatorio).
 - [ ] Demo de 3 minutos con los 3 desenlaces ensayada y reproducible.
 
-### 2.4 Non-Goals (NO en MVP)
+### 2.4 Non-Goals (NO en v1)
 
 - ❌ Vista del paciente (v1.1).
 - ❌ Integración HL7/FHIR. Recepción solo texto/PDF.
 - ❌ Soporte multi-hospital ni multi-aseguradora. UN hospital, UNA aseguradora.
 - ❌ **Rechazo automático bajo ninguna circunstancia.** Todo rechazo escala a auditor.
-- ❌ OCR avanzado para PDFs manuscritos. Si Vision API no extrae con calidad, escala.
+- ❌ OCR avanzado para PDFs manuscritos. Si el vision provider no extrae con calidad, escala.
+- ❌ Object storage en cloud (S3 / MinIO / R2). **PDFs viven en el filesystem del servidor en v1.**
+- ❌ Métricas, dashboards, observabilidad formal (Prometheus / Grafana / OTel).
+- ❌ Suite de tests, gates de coverage, evaluation benchmark, replay grabado.
+- ❌ Hybrid LLM (extractor + decision-maker en modelos distintos). Single-model en v1.
 - ❌ Integración con sistemas hospitalarios reales (HIS/EHR).
 - ❌ Notificaciones push/email/SMS. La UI muestra estado en vivo vía SSE.
 - ❌ Internacionalización. Spanish-only.
@@ -115,81 +128,81 @@ Un agente IA que recibe el informe médico digital (Hospital) y la póliza del p
 
 ### 3.1 Tool Requirements
 
-#### 3.1.1 Modelos LLM (estrategia híbrida)
+#### 3.1.1 Modelos LLM (estrategia simplificada para v1)
 
-| Modelo | Uso | Razón |
+| Componente | Default | Razón |
 |---|---|---|
-| **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) | Extracción de entidades clínicas (texto + vision) | Cheap + fast |
-| **Claude Sonnet 4.6** (`claude-sonnet-4-6`) | Decisión final + justificación clínica | Mejor razonamiento |
+| **Texto (extracción + decisión)** | DeepSeek `deepseek-chat` | Bajo costo, latencia razonable, soporte de structured output, API compatible con OpenAI. |
+| **Vision (PDFs / imágenes)** | Gemini `gemini-2.5-flash` (candidato) vía `VisionExtractor` port | DeepSeek no acepta imágenes. Port separado permite enchufar cualquier vision provider sin tocar el dominio. |
 
-Híbrido reduce ~60% el costo vs Sonnet puro sin sacrificar calidad de la decisión, que es el output más sensible.
+**Single-model para texto en v1**: el mismo `deepseek-chat` se usa tanto para extracción de entidades clínicas como para la decisión final. Hybrid (e.g., `deepseek-chat` + `deepseek-reasoner`) es upgrade post-v1 vía cambio de Settings — sin reescritura.
 
 #### 3.1.2 Frameworks IA
 
-- **LangChain** (`langchain-core`, `langchain-anthropic`): clientes LLM, tools, memoria.
+- **LangChain** (`langchain-core`, `langchain-openai`): clientes LLM, tools, memoria.
 - **LangGraph**: orquestación del agente como máquina de estados explícita. Auditable y testeable, requisito para dominio médico-legal.
+- DeepSeek se consume vía la SDK `openai` apuntando a `https://api.deepseek.com` (compatible). El base URL y la API key viven en `.env`.
 
 #### 3.1.3 Nodos del grafo (agente)
 
 | # | Nodo | Tipo | Modelo |
 |---|---|---|---|
-| 1 | `extract_report` | LLM | Haiku 4.5 (vision si PDF) |
+| 1 | `extract_report` | LLM (texto) o Vision (PDF) | DeepSeek (texto) / Vision adapter (PDF) |
 | 2 | `match_procedure` | Rule + embeddings (fallback) | — |
 | 3 | `load_policy_coverage` | Notion API | — |
 | 4 | `check_waiting_period` | Determinístico (date math) | — |
 | 5 | `check_required_docs` | Determinístico (set diff) | — |
-| 6 | `make_decision` | LLM | Sonnet 4.6 |
-| 7 | `persist_case` | Notion API (sumidero único) | — |
+| 6 | `make_decision` | LLM con structured output | DeepSeek |
+| 7 | `persist_case` | Notion API + FileStorage | — |
 
 **El agente NUNCA auto-rechaza por diseño**: el grafo no tiene rama `REJECTED_AUTO`. Todos los caminos negativos van a `ESCALATED`.
 
-#### 3.1.4 Patrón de desacople LLM
+**Contract de `make_decision`** — siempre devuelve un objeto estructurado validado por Pydantic:
 
-Dos niveles de abstracción:
-- **Bajo nivel** — `LLMProvider` (port): abstrae modelo/proveedor concreto. Adapters: `AnthropicLLMAdapter`, `OpenAILLMAdapter`, `GeminiLLMAdapter`.
-- **Alto nivel** — `MedicalReportExtractor`, `AuthorizationDecisionMaker`, `ResponseGenerator` (ports): abstraen estrategia. Cada adapter compone un `LLMProvider`.
-
-Strategy via Pydantic Settings + Dependency Injection en FastAPI:
-```python
-class AISettings(BaseSettings):
-    extraction_provider: Literal["anthropic", "openai", "gemini"] = "anthropic"
-    extraction_model: str = "claude-haiku-4-5-20251001"
-    decision_provider: Literal["anthropic", "openai", "gemini"] = "anthropic"
-    decision_model: str = "claude-sonnet-4-6"
+```json
+{
+  "outcome": "APPROVED_AUTO" | "DOCS_REQUESTED" | "ESCALATED",
+  "rationale": "string — explicación en español natural de por qué llegó a esta decisión, citando los hechos relevantes del informe y de la cobertura",
+  "confidence": 0.0..1.0,
+  "evidence": [
+    { "source": "report" | "policy", "field": "string", "quote": "string" }
+  ],
+  "missing_docs": ["string"],
+  "escalation_reason": "string"
+}
 ```
 
-### 3.2 Evaluation Strategy
+**Gate determinístico post-LLM**: si `confidence < 0.80`, el outcome se fuerza a `ESCALATED` con `escalation_reason = "low_confidence"`, sin importar lo que haya elegido el LLM. Esta lógica vive en el rule engine, no en el prompt — el LLM no puede saltarse el gate.
 
-#### 3.2.1 Benchmark de dataset sintético (150 casos)
+#### 3.1.4 Patrón de desacople LLM y Vision
 
-- 50 casos con respuesta esperada `APPROVED_AUTO` (cobertura clara, carencia cumplida, docs completos).
-- 50 casos con respuesta esperada `DOCS_REQUESTED` (falta exactamente un documento conocido).
-- 50 casos con respuesta esperada `ESCALATED` (con motivo enum específico).
+Dos puertos independientes en el dominio:
 
-#### 3.2.2 Métricas de aceptación
+- **`LLMProvider`** (port): abstrae el modelo de texto.
+  - Adapters: `DeepSeekLLMAdapter` (default), `OpenAILLMAdapter`, `GeminiLLMAdapter`, `AnthropicLLMAdapter`.
+- **`VisionExtractor`** (port): abstrae extracción desde PDFs / imágenes.
+  - Adapters: `GeminiVisionAdapter` (default candidato), `AnthropicVisionAdapter`, `OpenAIVisionAdapter`.
 
-| Métrica | Threshold MVP |
-|---|---|
-| Accuracy de outcome | ≥ 90% |
-| Recall de `ESCALATED` | ≥ 95% (preferimos sobre-escalar a sub-escalar) |
-| Precision de docs faltantes | ≥ 85% |
-| Falsos positivos en `APPROVED_AUTO` | ≤ 2% (un AUTO indebido es grave) |
-| Calibration | Casos con confidence < 0.80 deben tener accuracy < 0.70 (señal honesta) |
+Encima de esos puertos de bajo nivel viven puertos de alto nivel (estrategias):
 
-#### 3.2.3 Tests de propiedad
+- `MedicalReportExtractor`, `AuthorizationDecisionMaker`, `ResponseGenerator` — usan `LLMProvider` para texto.
+- `PdfReportExtractor` — usa `VisionExtractor` cuando el input es PDF.
 
-- `check_waiting_period`: Hypothesis-based, miles de combinaciones de fechas.
-- `check_required_docs`: comparaciones de set, casos límite.
+Strategy via Pydantic Settings + Dependency Injection en FastAPI:
 
-#### 3.2.4 Replay grabado
+```python
+class AISettings(BaseSettings):
+    text_provider: Literal["deepseek", "openai", "gemini", "anthropic"] = "deepseek"
+    text_model: str = "deepseek-chat"
+    text_base_url: str = "https://api.deepseek.com"
 
-- Tests de integración usan `FakeLLMProvider` con respuestas grabadas (record-replay).
-- Tests e2e nightly opcionales contra LLM real.
+    vision_provider: Literal["gemini", "anthropic", "openai"] = "gemini"
+    vision_model: str = "gemini-2.5-flash"
 
-#### 3.2.5 Drift monitoring (post-MVP)
+    confidence_threshold: float = 0.80
+```
 
-- Tracking de confidence distribution semanal.
-- Si la distribución se desplaza >10%, alerta para re-evaluar.
+> **Sección 3.2 (Evaluation Strategy) eliminada en v1.** Se reintroduce post-v1 cuando exista budget para benchmark dataset, replay tests y métricas de calibration.
 
 ---
 
@@ -197,7 +210,9 @@ class AISettings(BaseSettings):
 
 ### 4.1 Architecture Overview
 
-**Estilo**: Clean Architecture / Hexagonal en backend Y frontend. Capa de dominio sin dependencias externas. Adapters intercambiables.
+**Estilo backend**: **Vertical slicing + Clean Architecture**. Cada feature es un slice con sus propias capas (`domain/`, `application/`, `infrastructure/`, `api/`). Recursos transversales (LLM, vision, storage, Notion client base, middlewares) viven en `shared/`. Capas de dominio sin dependencias externas, adapters intercambiables.
+
+**Estilo frontend**: idéntico — slicing por feature con clean arch interna (ver 4.1.5). Backend y frontend simétricos.
 
 #### 4.1.1 Stack
 
@@ -205,14 +220,15 @@ class AISettings(BaseSettings):
 |---|---|
 | Frontend | Angular (standalone components, signals), Tailwind CSS v4 |
 | Backend | Python 3.12+, FastAPI, uv (dep manager), Pydantic v2 |
-| IA | LangChain + LangGraph + Anthropic SDK |
-| Persistencia (L1) | Notion (vía notion-client) |
-| Cache (L2) | Redis local (cachetools en MVP) |
-| Object storage (L3) | MinIO local / Cloudflare R2 prod |
-| Observabilidad | structlog + Prometheus + Grafana |
-| Testing | pytest, hypothesis, Playwright, @testing-library/angular |
-| CI/CD | GitHub Actions |
+| IA — texto | LangChain + LangGraph + `openai` SDK apuntando a DeepSeek |
+| IA — vision | Adapter intercambiable (Gemini default) |
+| Persistencia (datos) | Notion (vía `notion-client`) |
+| Cache | `cachetools` en proceso (v1) |
+| Storage de archivos | **Filesystem local del servidor** (`var/uploads/<case_id>/...`) detrás del port `FileStorage` |
+| CI/CD | GitHub Actions (lint + build, sin gates de tests en v1) |
 | Deploy | Fly.io (backend), Vercel (frontend) |
+
+> Filas de observabilidad y testing eliminadas para v1.
 
 #### 4.1.2 Diagrama de bloques
 
@@ -223,56 +239,74 @@ class AISettings(BaseSettings):
                      ▼
                [FastAPI Gateway]
                      │
-        ┌────────────┼─────────────────┐
-        ▼            ▼                 ▼
-   [LangGraph    [Notion           [LLM Adapters
-    Orchestrator] Adapters]         (Anthropic)]
-        │            │                 │
-        ▼            ▼                 ▼
-   [Rule        [7 DBs Notion]    [Anthropic API
-    Engine]                        Haiku + Sonnet]
+        ┌────────────┼─────────────────────────────┐
+        ▼            ▼                             ▼
+   [LangGraph    [Notion              [LLM Adapter: DeepSeek (default)]
+    Orchestrator] Adapters]            [Vision Adapter: Gemini (default)]
+        │            │                             │
+        ▼            ▼                             ▼
+   [Rule        [7 DBs Notion]          [DeepSeek API + Vision API]
+    Engine]
         │
-        └─── [Object Storage (PDFs, traces)]
+        └─── [FileStorage port → filesystem local del servidor]
 ```
 
 #### 4.1.3 Flujo end-to-end
 
 1. Hospital → `POST /api/v1/cases` (informe texto o PDF).
-2. Backend crea `AuthorizationCase` en Notion como `PENDIENTE`.
-3. LangGraph ejecuta nodos secuenciales con conditional edges.
-4. Cada nodo escribe `TraceStep` al estado.
-5. Decisión final → caso pasa a `APROBADO_AUTO` / `DOCS_PEDIDOS` / `ESCALADO`.
-6. SSE emite eventos en vivo al Hospital UI.
-7. Si `ESCALADO`, el caso aparece en bandeja del Auditor.
+2. Si hay PDF, backend lo persiste vía `FileStorage` adapter en `var/uploads/<case_id>/<filename>`.
+3. Backend crea `AuthorizationCase` en Notion como `PENDIENTE`, con referencia al path del archivo.
+4. LangGraph ejecuta nodos secuenciales con conditional edges.
+5. Cada nodo escribe `TraceStep` al estado.
+6. `make_decision` produce `AgentDecision` (outcome + rationale + confidence + evidence).
+7. Rule engine aplica el gate de confidence; outcome final es `APROBADO_AUTO` / `DOCS_PEDIDOS` / `ESCALADO`.
+8. SSE emite eventos en vivo al Hospital UI a lo largo del flujo.
+9. Si `ESCALADO`, el caso aparece en bandeja del Auditor con `rationale`, `confidence` y `evidence` visibles.
 
-#### 4.1.4 Estructura de capas (backend)
+#### 4.1.4 Estructura de capas (backend) — Slicing + Clean Arch
 
 ```
 src/pre_autorizacion/
-├── domain/               # ZERO deps externas
-│   ├── entities/
-│   ├── value_objects/
-│   ├── ports/
-│   └── exceptions.py
-├── application/
-│   ├── use_cases/
-│   └── agent/            # LangGraph state machine
-├── infrastructure/
-│   ├── persistence/notion/
-│   ├── llm/              # adapters de LLMProvider
-│   ├── extractors/       # adapters de MedicalReportExtractor
-│   ├── decision/         # rule_engine + llm_decision_maker
-│   └── storage/
-├── interfaces/
-│   └── api/v1/           # routers + schemas
+├── features/
+│   ├── authorization_cases/        # crear caso, listar, detalle, resolver, SSE
+│   │   ├── domain/                 # entidades del slice + ports específicos
+│   │   ├── application/            # use cases, agente LangGraph del slice
+│   │   ├── infrastructure/         # repos Notion del slice, FileStorage usage
+│   │   └── api/                    # routers FastAPI + schemas
+│   ├── policies/                   # CRUD pólizas y coberturas
+│   │   └── (domain/ application/ infrastructure/ api/)
+│   ├── procedures/                 # catálogo de procedimientos
+│   │   └── (...)
+│   └── auth/                       # login, refresh, RBAC
+│       └── (...)
+├── shared/
+│   ├── domain/                     # value objects compartidos, exceptions base
+│   ├── llm/                        # LLMProvider port + adapters
+│   │   ├── deepseek_adapter.py     # default
+│   │   ├── openai_adapter.py
+│   │   ├── gemini_adapter.py
+│   │   └── anthropic_adapter.py
+│   ├── vision/                     # VisionExtractor port + adapters
+│   │   ├── gemini_adapter.py       # default candidato
+│   │   ├── anthropic_adapter.py
+│   │   └── openai_adapter.py
+│   ├── storage/                    # FileStorage port + LocalFsAdapter
+│   ├── notion/                     # NotionClient base
+│   └── api/                        # middlewares, error handlers, SSE base
 └── config/
-    ├── settings.py
-    └── di.py             # composition root
+    ├── settings.py                 # Pydantic Settings (.env-driven)
+    └── di.py                       # composition root
 ```
+
+Reglas de import entre slices:
+- Un feature solo importa de su propio slice o de `shared/`.
+- Dependencias entre features se expresan vía ports en `domain/` y se resuelven en `config/di.py`.
+- `shared/llm/` y `shared/vision/` exponen ports en su `__init__.py` siguiendo la regla de re-exports a nivel de paquete.
 
 #### 4.1.5 Estructura de capas (frontend)
 
 Cada feature es Clean Architecture en miniatura:
+
 ```
 features/<feature>/
 ├── domain/         (entities, value objects, ports)
@@ -289,7 +323,19 @@ Estado vía **Signals** + **Facade pattern**, no NgRx en MVP. Standalone compone
 
 #### 4.2.1 Entidades de dominio
 
-`Patient`, `Insurer`, `Procedure`, `Policy`, `Coverage`, `MedicalReport`, `AuthorizationCase`.
+`Patient`, `Insurer`, `Procedure`, `Policy`, `Coverage`, `MedicalReport`, `AuthorizationCase`, `AgentDecision`.
+
+`AgentDecision` (value object):
+```
+outcome:            APPROVED_AUTO | DOCS_REQUESTED | ESCALATED
+rationale:          str
+confidence:         float in [0.0, 1.0]
+evidence:           list[Evidence]
+missing_docs:       list[str] | None
+escalation_reason:  str | None
+```
+
+`Evidence` (value object): `source` (`"report"` | `"policy"`), `field` (str), `quote` (str).
 
 #### 4.2.2 DBs Notion (7)
 
@@ -298,18 +344,18 @@ Estado vía **Signals** + **Facade pattern**, no NgRx en MVP. Standalone compone
 3. **Procedimientos** — CódigoCIE10, Nombre, Categoría, Descripción
 4. **Pólizas** — NumeroPoliza, Paciente (rel), Aseguradora (rel), Plan, FechaInicio, FechaFin, Estado
 5. **Coberturas** — Póliza (rel), Procedimiento (rel), Cubierto, DíasCarencia, Copago, DocsRequeridos
-6. **InformesMédicos** — Paciente (rel), Formato, Contenido, ProcedimientoSolicitado (rel), Diagnóstico, FechaInforme
-7. **CasosAutorización** *(agregado central)* — Informe (rel), Póliza (rel), Estado, DecisiónJSON, MotivoEscalamiento, Auditor (person), TrazaAgente, CreatedAt, DecidedAt
+6. **InformesMédicos** — Paciente (rel), Formato, Contenido, ProcedimientoSolicitado (rel), Diagnóstico, FechaInforme, ArchivoPath (si aplica)
+7. **CasosAutorización** *(agregado central)* — Informe (rel), Póliza (rel), Estado, **Outcome**, **Rationale** (rich_text), **Confidence** (number), **Evidence** (rich_text JSON), MotivoEscalamiento, Auditor (person), TrazaAgente (rich_text JSON), CreatedAt, DecidedAt
 
-PDFs **NO** viven en Notion: van a object storage. Notion solo guarda el link.
+PDFs **NO** viven en Notion ni en cloud storage. Viven en el **filesystem del servidor** bajo `var/uploads/<case_id>/<filename>`. Notion guarda solo el path relativo. La descarga pasa por endpoint autenticado que valida RBAC antes de servir el archivo.
 
 ### 4.3 Integration Points
 
 #### 4.3.1 APIs externas
 
 - **Notion API** (read/write): 7 DBs.
-- **Anthropic API**: Haiku 4.5 (extracción) + Sonnet 4.6 (decisión).
-- **Object storage** (S3 protocol): PDFs y traces grandes.
+- **DeepSeek API** (vía `openai` SDK con `base_url=https://api.deepseek.com`): `deepseek-chat` para extracción texto + decisión.
+- **Vision API** (Gemini default vía adapter): extracción desde PDFs.
 
 #### 4.3.2 APIs internas (REST v1)
 
@@ -317,10 +363,11 @@ PDFs **NO** viven en Notion: van a object storage. Notion solo guarda el link.
 |---|---|
 | `/api/v1/auth/*` | login, refresh, me, logout |
 | `/api/v1/cases` (POST/GET) | Hospital crea, todos listan filtrado por rol |
-| `/api/v1/cases/{id}` | Detalle |
+| `/api/v1/cases/{id}` | Detalle (incluye `rationale`, `confidence`, `evidence`) |
 | `/api/v1/cases/{id}/trace` | Trace completo |
 | `/api/v1/cases/{id}/resolve` | Auditor decide |
 | `/api/v1/cases/{id}/events` | **SSE stream** |
+| `/api/v1/cases/{id}/files/{filename}` | Descarga autenticada de archivos servidos por `FileStorage` |
 | `/api/v1/policies/*` | CRUD pólizas |
 | `/api/v1/procedures` | Búsqueda catálogo |
 | `/health`, `/ready` | Probes |
@@ -341,90 +388,63 @@ FastAPI genera `/openapi.json`. Frontend genera TS types con `openapi-typescript
 
 - RBAC con `Depends(require_role(...))` en cada router FastAPI.
 - Casos visibles solo para hospital creador, aseguradora dueña, y auditores.
+- Endpoint de descarga de archivos valida que el usuario tenga acceso al caso al que pertenece el archivo, y bloquea path traversal.
 
 #### 4.4.3 Privacidad
 
-- **MVP**: datos sintéticos exclusivamente. **NUNCA** datos reales de pacientes en repo, demos, ni Notion.
-- **Producción real (v2.0)**: requiere HIPAA / Habeas Data compliance. Notion **NO** es BAA-compliant. Migración obligatoria a almacenamiento conforme antes de procesar PHI real. La arquitectura Port-Adapter permite el cambio **sin reescritura del dominio**.
-- Logs: redacción automática de DNI/nombres en non-debug.
+- **v1**: datos sintéticos exclusivamente. **NUNCA** datos reales de pacientes en repo, demos, ni Notion.
+- **Producción real (v2.0)**: requiere HIPAA / Habeas Data compliance. Notion **NO** es BAA-compliant; el filesystem local del servidor **tampoco** lo es por sí solo. Migración obligatoria a almacenamiento conforme antes de procesar PHI real. La arquitectura Port-Adapter permite el cambio (`FileStorage` → S3 con BAA, Notion → DB clínica conforme) **sin reescritura del dominio**.
 - TLS obligatorio en todas las comunicaciones.
 - Secrets en `.env` (dev), Doppler / 1Password (producción). **Nunca** commiteados.
+- Filesystem local: directorio de uploads fuera del repo, permisos restringidos al usuario del proceso, validación estricta de nombres de archivo (UUID generado server-side, no nombre del cliente).
 
 #### 4.4.4 Auditoría
 
-- 100% de las decisiones tienen `TrazaAgente` persistente con: inputs, outputs, modelo usado, tokens, duración, errores, confidence.
+- 100% de las decisiones tienen `AgentDecision` (rationale, confidence, evidence) + `TrazaAgente` persistente con: inputs, outputs, modelo usado, tokens, duración, errores.
 - `trace_id` correlacionable backend ↔ frontend para soporte/debugging.
-- Logs estructurados con structlog.
 
-### 4.5 Observabilidad
-
-#### 4.5.1 Logging
-- structlog en formato JSON.
-- `trace_id` (ULID time-orderable) propagado vía middleware.
-- Redaction automática de PII en non-debug.
-
-#### 4.5.2 Métricas (Prometheus)
-- Latencia p50/p95/p99 por endpoint y por nodo del grafo.
-- Distribución de outcomes (% AUTO/DOCS/ESCALATED).
-- Distribución de confidence score.
-- Tokens y costo por caso.
-- Llamadas a Notion + latencia + tasa de error.
-
-#### 4.5.3 Tracing
-- MVP: `trace_id` correlacionado en logs.
-- Producción: OpenTelemetry (se enchufa después sin reescritura).
-
-### 4.6 Testing
-
-Pirámide:
-- **Unit** (cientos): `domain/`, `value_objects/`, `rule_engine/`. Sin I/O. Run en cada save (TDD strict).
-- **Integration** (~50): adapters contra mocks (`respx`, `FakeLLMProvider`). Run en cada PR.
-- **e2e** (~10): Playwright + Notion-test-DB + LLM real. Run nightly o pre-release.
-
-Coverage gate:
-- `domain/` + `application/`: **≥ 90%**
-- `infrastructure/`: ≥ 70%
-- `interfaces/`: ≥ 60%
+> **Sección 4.5 (Observabilidad) y 4.6 (Testing) eliminadas en v1.** Se reintroducen post-v1 con Prometheus + Grafana + OTel y la pirámide de tests con coverage gates.
 
 ---
 
 ## 5. Risks & Roadmap
 
-### 5.1 Phased Rollout
+### 5.1 Phased Rollout (v1 / hackathon)
 
 | Fase | Duración | Outcome |
 |---|---|---|
-| **0 — Setup** | 1-2 días | Repo, uv, Angular, docker-compose, 7 DBs Notion creadas, CI básico. |
-| **1 — Domain core** | 3-4 días | Entidades, ports, rule engine. TDD estricto. ≥100 unit tests verdes. |
-| **2 — Backend skeleton** | 2-3 días | FastAPI con auth, Notion adapters (read), DI, endpoint POST `/cases` sin agente. |
-| **3 — Agente LangGraph** | 4-5 días | Grafo completo, LLM adapters, FakeLLMProvider, extractores texto/PDF, persistencia de traces. |
-| **4 — Frontend MVP** | 4-5 días | 3 layouts, feature `authorization-cases` completa, SSE consumer, agent-trace-viewer, login. |
-| **5 — Demo data + e2e** | 2 días | Seed scripts, 3 fixtures coherentes (texto + PDF), Playwright tests, demo script ensayado. |
-| **MVP total** | **~3 semanas** | **Demo lista** |
-| **6 — v1.0 hardening** | 1-2 sem | Prometheus + Grafana + OTel + tests de propiedad + multi-procedimiento (3×3=9 casos). |
-| **7 — v1.1 piloto** | 3-4 sem | Auth real, migración Notion → Postgres detrás del mismo port, vista del paciente, audit log persistente. |
-| **8 — v2.0 producto real** | meses | HIPAA compliance, BAA con vendors, multi-tenant, integración HL7/FHIR, drift monitoring del modelo. |
+| **0 — Setup** | 1-2 días | Repo, uv, Angular, 7 DBs Notion creadas, CI básico (lint + build). |
+| **1 — Domain core** | 2-3 días | Entidades por slice, ports (`LLMProvider`, `VisionExtractor`, `FileStorage`), rule engine, `AgentDecision` value object. |
+| **2 — Backend skeleton** | 2-3 días | FastAPI con auth, Notion adapters (read), DI, endpoint POST `/cases` sin agente, `LocalFsAdapter` para archivos. |
+| **3 — Agente LangGraph** | 4-5 días | Grafo completo, `DeepSeekLLMAdapter`, `GeminiVisionAdapter`, structured output del decision-maker, gate de confidence, persistencia. |
+| **4 — Frontend MVP** | 4-5 días | 3 layouts, feature `authorization-cases` completa, SSE consumer, viewer de `rationale` + `confidence` + `evidence` + trace, login. |
+| **5 — Demo data + ensayo** | 1-2 días | Seed scripts, 3 fixtures coherentes (texto + PDF), demo script ensayado y reproducible. |
+| **v1 total** | **~2-3 semanas** | **Demo lista** |
 
-### 5.2 Technical Risks
+**Post-v1** (no en este PRD): suite de tests + coverage gates, observabilidad (Prometheus + Grafana + OTel), evaluation benchmark con 150 casos sintéticos, hybrid LLM strategy (`deepseek-chat` + `deepseek-reasoner`), migración de `FileStorage` a S3/MinIO, vista del paciente, auth real (Auth0/Keycloak), multi-tenant, integración HL7/FHIR, drift monitoring.
+
+### 5.2 Technical Risks (v1)
 
 | Riesgo | Severidad | Probabilidad | Mitigación |
 |---|---|---|---|
-| Latencia de Notion API (200-500ms × 4-7 calls) | Alta | Alta | L2 cache (Redis) + warm-up del catálogo + rate-limit-aware client |
+| Latencia de Notion API (200-500ms × 4-7 calls) | Alta | Alta | `cachetools` en proceso + warm-up del catálogo + rate-limit-aware client |
 | Vision API mala extracción de PDFs escaneados | Media | Alta | Falla → ESCALATE con razón clara. No intentar OCR creativo. |
-| Costo del LLM crece linealmente con volumen | Media | Media | Modelo híbrido (~60% reducción). Métrica cost-per-case visible. |
-| Drift del modelo entre versiones de Claude | Alta | Baja-Media | Pin de versión en Settings. Re-evaluación benchmark antes de upgrade. |
-| Confidence score mal calibrado | Alta | Media | Threshold conservador (0.80). Human-in-the-loop por diseño. Calibration tests. |
-| Notion downtime | Media | Baja | Circuit breaker. Health check en `/ready`. |
-| **Notion no es BAA-compliant** | **Crítica (prod)** | **Certeza** | NO procesar PHI hasta migrar a almacenamiento HIPAA-compliant en v2.0. |
+| Costo del LLM crece linealmente con volumen | Baja | Media | DeepSeek default ~10× más barato que Claude. Cost-per-case visible en logs. |
+| Drift entre versiones de DeepSeek | Media | Baja-Media | Pin de modelo en Settings. |
+| Confidence score mal calibrado | Alta | Media | Threshold conservador (0.80) + escalamiento forzado bajo umbral + Human-in-the-loop por diseño. |
+| Notion downtime | Media | Baja | Health check en `/ready`. |
+| **Notion / filesystem local no son BAA-compliant** | **Crítica (prod)** | **Certeza** | NO procesar PHI hasta migrar a almacenamiento HIPAA-compliant en v2.0. |
 | Auto-aprobación errónea (falso positivo) | Crítica | Baja | Threshold alto + rule engine determinístico. Solo aprobar cuando todo es claro. |
 | Auto-rechazo accidental | Crítica | **Cero por diseño** | El grafo NO tiene rama de auto-rechazo. |
-| Filtración de PHI en logs | Crítica | Media | Redaction automática. Tests de redaction. Logs review en CI. |
+| Pérdida de archivos por filesystem local | Media | Media | Backup nightly del directorio de uploads. Migración a S3 prevista post-v1. |
+| Path traversal / file enumeration | Alta | Baja | Nombres de archivo generados server-side (UUID), validación estricta en endpoint de descarga, RBAC por caso. |
 
 ### 5.3 Open Questions
 
-- Modelo de embeddings para fallback de matching (`voyage-3-lite` vs `text-embedding-3-small`). Decisión de implementación.
+- Embeddings para fallback de matching (`voyage-3-lite` vs `text-embedding-3-small`). Decisión de implementación.
 - Estrategia de retry del LLM (intentos, exponential backoff). Definir en Phase 3.
-- TTL del cache L2 de pólizas (5 min vs lifetime-de-caso). A medir en MVP.
+- TTL del cache de pólizas (5 min vs lifetime-de-caso). A medir en MVP.
+- ¿`gemini-2.5-flash` vs `gemini-2.5-pro` como vision default? Probar ambos en Phase 3 con un par de PDFs reales.
 
 ---
 
@@ -440,24 +460,28 @@ Coverage gate:
 | **SSE** | Server-Sent Events. Stream HTTP unidireccional servidor → cliente. |
 | **LangGraph** | Framework de orquestación basado en máquinas de estados, ecosistema LangChain. |
 | **Port-Adapter** | Patrón Hexagonal donde el dominio define interfaces (ports) y la infraestructura provee implementaciones (adapters). |
+| **Vertical slicing** | Organización del código por feature/caso de uso en el nivel superior, donde cada slice contiene sus propias capas de dominio, aplicación, infra y API. |
+| **AgentDecision** | Value object que el agente emite con `outcome`, `rationale`, `confidence` y `evidence`. Contrato auditable de toda decisión. |
 
 ## Apéndice B — Referencias
 
 - Repo: https://github.com/lesquel/pre-autorizacion-quirurgica
 - LangGraph: https://langchain-ai.github.io/langgraph/
 - FastAPI: https://fastapi.tiangolo.com/
+- DeepSeek API (OpenAI-compatible): https://api-docs.deepseek.com/
 - Clean Architecture (Robert C. Martin)
 - Hexagonal Architecture (Alistair Cockburn)
+- Vertical Slice Architecture (Jimmy Bogard)
 - Notion API: https://developers.notion.com/
 
 ---
 
-## Aprobaciones
+## Aprobaciones (v1.1)
 
-- [x] Arquitectura general
-- [x] Stack tecnológico
-- [x] Modelo de datos
-- [x] Roadmap por fases
+- [x] Arquitectura general (slicing + clean arch)
+- [x] Stack tecnológico (DeepSeek default, vision adapter separado, filesystem local detrás de port)
+- [x] Modelo de datos (incluye `AgentDecision` con rationale/confidence/evidence)
+- [x] Roadmap por fases (v1 sin testing/observabilidad)
 - [x] Criterios de aceptación
 
-**Próximo paso**: Fase 0 — setup del proyecto.
+**Próximo paso**: escribir el plan de implementación (writing-plans) y comenzar Fase 0 — setup del proyecto.
