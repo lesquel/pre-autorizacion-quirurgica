@@ -79,11 +79,16 @@ class SubmitCaseInput:
         report:        informe médico ya armado (entidad de dominio).
         policy_number: número de póliza del paciente.
         scenario_key:  override opcional para demos (forzar un escenario).
+        case_id:       id pre-generado por el caller. Cuando viene set, el use
+                       case lo usa; si es None, genera uno con uuid4.
+                       Útil para que el endpoint de upload pueda reservar el
+                       case_id antes de persistir el archivo bajo ese path.
     """
 
     report: MedicalReport
     policy_number: str
     scenario_key: str | None = None
+    case_id: str | None = None
 
 
 # ─── Internos del flow MOCK ────────────────────────────────────────────────
@@ -196,7 +201,7 @@ class SubmitCaseUseCase:
 
         created_at = datetime.now(UTC)
         case = AuthorizationCase(
-            id=f"CASE-{uuid.uuid4().hex[:8].upper()}",
+            id=input.case_id or f"CASE-{uuid.uuid4().hex[:8].upper()}",
             report_id=input.report.id,
             policy_number=input.policy_number,
             status=CaseStatus.PENDIENTE,

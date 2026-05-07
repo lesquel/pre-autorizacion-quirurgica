@@ -199,6 +199,7 @@ async def submit_case_upload(
         report=domain_report,
         policy_number=policy_number,
         scenario_key=scenario_key,
+        case_id=case_id,
     )
     case = await use_case.execute(use_case_input)
     return case_to_out(case)
