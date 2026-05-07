@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Subject, firstValueFrom, type Observable } from 'rxjs';
+import { Subject, firstValueFrom as firstPromise, type Observable } from 'rxjs';
 
 import { environment } from '../../../../../environments/environment';
 import { API_BASE_URL } from '../../../../shared/api/api-base-url.token';
@@ -35,27 +35,15 @@ export class HttpAgentAdapter extends AgentOrchestrator {
     out: Subject<AgentEvent>,
   ): Promise<void> {
     try {
-      const body = {
-        report: {
-          patientId: request.report.patientId,
-          format: request.report.format === 'pdf' ? 'PDF' : 'TEXT',
-          content: request.report.content,
-          procedureSolicitedHint: request.report.procedureSolicitedHint,
-          diagnosis: request.report.diagnosis,
-          attendingDoctor: request.report.attendingDoctor,
-        },
-        policyNumber: request.policyNumber,
-        scenarioKey: request.scenarioKey,
-      };
-      const caseDto = await firstValueFrom(
-        this.http.post<CaseDto>(`${this.base}/api/v1/cases`, body),
-      );
+      const caseDto = request.file
+        ? await this.uploadPdf(request)
+        : await this.submitText(request);
 
       const fullCase: AuthorizationCase = caseFromDto(caseDto);
       // Pre-seed the local repo so list views see the new case immediately.
       this.cases.create(fullCase);
 
-      const traceBody = await firstValueFrom(
+      const traceBody = await firstPromise(
         this.http.get<{ trace: unknown[] }>(
           `${this.base}/api/v1/cases/${encodeURIComponent(fullCase.id)}/trace`,
         ),
@@ -109,6 +97,46 @@ export class HttpAgentAdapter extends AgentOrchestrator {
       });
       out.complete();
     }
+  }
+
+  private async submitText(request: AgentRunRequest): Promise<CaseDto> {
+    const body = {
+      report: {
+        patientId: request.report.patientId,
+        format: 'TEXT',
+        content: request.report.content,
+        procedureSolicitedHint: request.report.procedureSolicitedHint,
+        diagnosis: request.report.diagnosis,
+        attendingDoctor: request.report.attendingDoctor,
+      },
+      policyNumber: request.policyNumber,
+      scenarioKey: request.scenarioKey,
+    };
+    return await firstPromise(
+      this.http.post<CaseDto>(`${this.base}/api/v1/cases`, body),
+    );
+  }
+
+  private async uploadPdf(request: AgentRunRequest): Promise<CaseDto> {
+    const fd = new FormData();
+    fd.set('policy_number', request.policyNumber);
+    fd.set('patient_id', request.report.patientId);
+    if (request.report.procedureSolicitedHint) {
+      fd.set('procedure_solicited_hint', request.report.procedureSolicitedHint);
+    }
+    if (request.report.diagnosis) {
+      fd.set('diagnosis', request.report.diagnosis);
+    }
+    if (request.report.attendingDoctor) {
+      fd.set('attending_doctor', request.report.attendingDoctor);
+    }
+    if (request.scenarioKey) {
+      fd.set('scenario_key', request.scenarioKey);
+    }
+    fd.set('file', request.file as Blob);
+    return await firstPromise(
+      this.http.post<CaseDto>(`${this.base}/api/v1/cases/upload`, fd),
+    );
   }
 }
 

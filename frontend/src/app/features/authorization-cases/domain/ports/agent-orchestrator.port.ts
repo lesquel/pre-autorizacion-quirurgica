@@ -15,6 +15,7 @@ export interface AgentRunRequest {
   readonly report: MedicalReport;
   readonly policyNumber: string;
   readonly scenarioKey?: string;
+  readonly file?: File;
 }
 
 /**

@@ -14,6 +14,7 @@ export interface SubmitCaseInput {
   readonly report: MedicalReport;
   readonly policyNumber: string;
   readonly scenarioKey?: string;
+  readonly file?: File;
 }
 
 /**
@@ -40,6 +41,7 @@ export class SubmitCaseUseCase {
       report: input.report,
       policyNumber: input.policyNumber,
       scenarioKey: input.scenarioKey,
+      file: input.file,
     });
 
     // The HTTP adapter resolves the real caseId asynchronously (after the POST

@@ -169,6 +169,7 @@ export class HospitalSubmitPage {
       report,
       policyNumber: input.policyNumber,
       scenarioKey: this._scenarioKey(),
+      file: input.file,
     });
 
     // Navegamos al live-run inmediatamente: la facade ya inicializó
