@@ -8,6 +8,7 @@ import {
   ListCoveragesUseCase,
   ListInsurersUseCase,
   ListPoliciesUseCase,
+  ReplaceCoveragesUseCase,
   UpdatePolicyUseCase,
   type DashboardMetrics,
 } from '../use-cases';
@@ -36,6 +37,7 @@ export class PoliciesFacade {
   private readonly createPolicyUC = inject(CreatePolicyUseCase);
   private readonly updatePolicyUC = inject(UpdatePolicyUseCase);
   private readonly deletePolicyUC = inject(DeletePolicyUseCase);
+  private readonly replaceCoveragesUC = inject(ReplaceCoveragesUseCase);
 
   /** Todas las pólizas conocidas. */
   readonly policies = computed<readonly Policy[]>(() =>
@@ -83,9 +85,10 @@ export class PoliciesFacade {
     return this.deletePolicyUC.execute(number);
   }
 
-  createCoverage(): never {
-    throw new Error(
-      'Coverage CRUD coming soon — MVP es read-only (decisión D2 del PRD).',
-    );
+  replaceCoverages(
+    policyNumber: string,
+    coverages: readonly Coverage[],
+  ): Promise<readonly Coverage[]> {
+    return this.replaceCoveragesUC.execute(policyNumber, coverages);
   }
 }
