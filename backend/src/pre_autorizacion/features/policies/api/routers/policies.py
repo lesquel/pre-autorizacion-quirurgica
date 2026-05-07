@@ -15,25 +15,34 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 
 from pre_autorizacion.features.auth.domain.entities import Role, User
 from pre_autorizacion.features.policies.api.schemas.policies import (
+    CoverageIn,
     CoverageOut,
     DashboardMetricsOut,
     InsurerOut,
+    PolicyIn,
     PolicyOut,
+    coverage_in_to_domain,
     coverage_to_out,
     insurer_to_out,
     metrics_to_out,
+    policy_in_to_domain,
     policy_to_out,
 )
 from pre_autorizacion.features.policies.application.use_cases import (
+    CreatePolicyUseCase,
+    DeletePolicyUseCase,
     GetDashboardMetricsUseCase,
     GetPolicyUseCase,
     ListCoveragesUseCase,
     ListInsurersUseCase,
     ListPoliciesUseCase,
+    ReplacePolicyCoveragesUseCase,
+    UpdatePolicyUseCase,
 )
 from pre_autorizacion.shared.api.deps import (
     CaseRepositoryDep,
@@ -75,6 +84,28 @@ GetPolicyDep = Annotated[GetPolicyUseCase, Depends(_get_get_policy)]
 ListCoveragesDep = Annotated[ListCoveragesUseCase, Depends(_get_list_coverages)]
 ListInsurersDep = Annotated[ListInsurersUseCase, Depends(_get_list_insurers)]
 DashboardMetricsDep = Annotated[GetDashboardMetricsUseCase, Depends(_get_metrics)]
+
+
+def _get_create_policy(repo: PolicyRepositoryDep) -> CreatePolicyUseCase:
+    return CreatePolicyUseCase(policy_repository=repo)
+
+
+def _get_update_policy(repo: PolicyRepositoryDep) -> UpdatePolicyUseCase:
+    return UpdatePolicyUseCase(policy_repository=repo)
+
+
+def _get_delete_policy(repo: PolicyRepositoryDep) -> DeletePolicyUseCase:
+    return DeletePolicyUseCase(policy_repository=repo)
+
+
+def _get_replace_coverages(repo: CoverageRepositoryDep) -> ReplacePolicyCoveragesUseCase:
+    return ReplacePolicyCoveragesUseCase(coverage_repository=repo)
+
+
+CreatePolicyDep = Annotated[CreatePolicyUseCase, Depends(_get_create_policy)]
+UpdatePolicyDep = Annotated[UpdatePolicyUseCase, Depends(_get_update_policy)]
+DeletePolicyDep = Annotated[DeletePolicyUseCase, Depends(_get_delete_policy)]
+ReplaceCoveragesDep = Annotated[ReplacePolicyCoveragesUseCase, Depends(_get_replace_coverages)]
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
@@ -172,6 +203,72 @@ async def get_dashboard_metrics(
     """
     metrics = await use_case.execute()
     return metrics_to_out(metrics)
+
+
+@router.post(
+    "/policies",
+    response_model=PolicyOut,
+    status_code=http_status.HTTP_201_CREATED,
+    summary="Create a policy (insurer-only)",
+)
+async def create_policy(
+    body: PolicyIn,
+    use_case: CreatePolicyDep,
+    _user: Annotated[User, Depends(require_role(Role.INSURER))],
+) -> PolicyOut:
+    policy = await use_case.execute(policy_in_to_domain(body))
+    return policy_to_out(policy)
+
+
+@router.put(
+    "/policies/{number}",
+    response_model=PolicyOut,
+    summary="Update a policy by number (insurer-only)",
+)
+async def update_policy(
+    number: str,
+    body: PolicyIn,
+    use_case: UpdatePolicyDep,
+    _user: Annotated[User, Depends(require_role(Role.INSURER))],
+) -> PolicyOut:
+    if body.number != number:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path number {number!r} does not match body number {body.number!r}",
+        )
+    policy = await use_case.execute(policy_in_to_domain(body))
+    return policy_to_out(policy)
+
+
+@router.delete(
+    "/policies/{number}",
+    status_code=http_status.HTTP_204_NO_CONTENT,
+    summary="Delete a policy by number (insurer-only)",
+)
+async def delete_policy(
+    number: str,
+    use_case: DeletePolicyDep,
+    _user: Annotated[User, Depends(require_role(Role.INSURER))],
+) -> None:
+    await use_case.execute(number)
+
+
+@router.put(
+    "/policies/{number}/coverages",
+    response_model=list[CoverageOut],
+    summary="Replace all coverages for a policy (insurer-only)",
+)
+async def replace_coverages(
+    number: str,
+    body: list[CoverageIn],
+    use_case: ReplaceCoveragesDep,
+    _user: Annotated[User, Depends(require_role(Role.INSURER))],
+) -> list[CoverageOut]:
+    new = await use_case.execute(
+        number,
+        tuple(coverage_in_to_domain(item) for item in body),
+    )
+    return [coverage_to_out(c) for c in new]
 
 
 __all__ = ["router"]
