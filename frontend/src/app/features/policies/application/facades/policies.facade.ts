@@ -2,10 +2,13 @@ import { Injectable, computed, inject } from '@angular/core';
 
 import type { Coverage, Insurer, Policy } from '../../domain/entities';
 import {
+  CreatePolicyUseCase,
+  DeletePolicyUseCase,
   GetDashboardMetricsUseCase,
   ListCoveragesUseCase,
   ListInsurersUseCase,
   ListPoliciesUseCase,
+  UpdatePolicyUseCase,
   type DashboardMetrics,
 } from '../use-cases';
 
@@ -21,11 +24,8 @@ import {
  *   `caseRepository.cases()` (signal), por lo tanto el computed se invalida
  *   cuando se crean/mutan casos. Esto es lo que mantiene el dashboard vivo
  *   durante el demo.
- *
- * MVP — decisión D2 del PRD: las vistas de Policies y Coverages son stubs
- * "coming soon". Por eso los métodos de mutación tiran un Error explícito
- * en vez de mutar un repositorio: cualquier intento de invocarlos en runtime
- * delata un bug en la UI antes de que se mezcle estado inconsistente.
+ * - `createPolicy`, `updatePolicy`, `deletePolicy`: delegados a sus use cases
+ *   correspondientes. `createCoverage` permanece como stub hasta Task 17.
  */
 @Injectable({ providedIn: 'root' })
 export class PoliciesFacade {
@@ -33,6 +33,9 @@ export class PoliciesFacade {
   private readonly listCoverages = inject(ListCoveragesUseCase);
   private readonly listInsurers = inject(ListInsurersUseCase);
   private readonly getDashboardMetrics = inject(GetDashboardMetricsUseCase);
+  private readonly createPolicyUC = inject(CreatePolicyUseCase);
+  private readonly updatePolicyUC = inject(UpdatePolicyUseCase);
+  private readonly deletePolicyUC = inject(DeletePolicyUseCase);
 
   /** Todas las pólizas conocidas. */
   readonly policies = computed<readonly Policy[]>(() =>
@@ -68,30 +71,16 @@ export class PoliciesFacade {
     return this.listCoverages.execute(n);
   }
 
-  // ---------------------------------------------------------------------------
-  // Stubs MVP (decisión D2 del PRD: Policies/Coverages son read-only).
-  // ---------------------------------------------------------------------------
-  // Elegimos `throw` (no `console.warn`) a propósito: si la UI llama a esto en
-  // el MVP es un bug — preferimos que falle ruidosamente en dev/demo a que
-  // pase silenciosamente y deje un estado fantasma. El mensaje queda en
-  // español para que en el demo no haya ambigüedad sobre el alcance.
-
-  createPolicy(): never {
-    throw new Error(
-      'Policy CRUD coming soon — MVP es read-only (decisión D2 del PRD).',
-    );
+  createPolicy(p: Policy): Promise<Policy> {
+    return this.createPolicyUC.execute(p);
   }
 
-  updatePolicy(): never {
-    throw new Error(
-      'Policy CRUD coming soon — MVP es read-only (decisión D2 del PRD).',
-    );
+  updatePolicy(p: Policy): Promise<Policy> {
+    return this.updatePolicyUC.execute(p);
   }
 
-  deletePolicy(): never {
-    throw new Error(
-      'Policy CRUD coming soon — MVP es read-only (decisión D2 del PRD).',
-    );
+  deletePolicy(number: string): Promise<void> {
+    return this.deletePolicyUC.execute(number);
   }
 
   createCoverage(): never {

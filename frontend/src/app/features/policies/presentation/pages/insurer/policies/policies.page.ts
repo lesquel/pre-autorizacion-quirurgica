@@ -3,12 +3,14 @@ import {
   Component,
   computed,
   inject,
+  signal,
 } from '@angular/core';
 
 import { PageHeader } from '../../../../../../core/components';
 import { Pill } from '../../../../../../shared/ui';
 import type { Insurer, Policy } from '../../../../domain/entities';
 import { PoliciesFacade } from '../../../../application/facades/policies.facade';
+import { PolicyFormComponent } from './policy-form.component';
 
 /**
  * Row del listado — pre-resolvemos `insurerName` para que el template no haga
@@ -24,18 +26,19 @@ interface PolicyRow {
   selector: 'app-insurer-policies-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, Pill],
+  imports: [PageHeader, Pill, PolicyFormComponent],
   template: `
     <app-page-header title="Pólizas" subtitle="Gestión de pólizas" />
 
     <section class="px-7 py-6 flex flex-col gap-4">
-      <!-- Banner MVP read-only (decisión D2 del PRD) -->
-      <div
-        class="bg-warn-bg text-warn border border-warn/30 p-3 rounded text-[12px]"
-        role="status"
-      >
-        <strong class="font-mono uppercase tracking-wider mr-2">MVP read-only</strong>
-        — la gestión completa (alta/baja/edición) llega en v1.1.
+      <div class="flex justify-end">
+        <button
+          type="button"
+          class="px-4 py-2 bg-ink dark:bg-bg text-bg dark:text-ink font-mono text-xs uppercase tracking-wider"
+          (click)="openCreate()"
+        >
+          + Nueva póliza
+        </button>
       </div>
 
       <div class="bg-surface border border-line overflow-x-auto">
@@ -63,6 +66,9 @@ interface PolicyRow {
               <th class="text-left font-mono text-[11px] uppercase tracking-wider text-ink-3 px-3 py-2">
                 Estado
               </th>
+              <th class="text-left font-mono text-[11px] uppercase tracking-wider text-ink-3 px-3 py-2">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -77,10 +83,28 @@ interface PolicyRow {
                 <td class="px-3 py-2.5">
                   <app-pill [text]="row.policy.status" [tone]="toneFor(row.policy.status)" />
                 </td>
+                <td class="px-3 py-2.5">
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      class="text-xs font-mono uppercase text-info hover:underline"
+                      (click)="openEdit(row.policy)"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="text-xs font-mono uppercase text-error hover:underline"
+                      (click)="onDelete(row.policy)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="px-3 py-6 text-center text-ink-4 text-sm">
+                <td colspan="8" class="px-3 py-6 text-center text-ink-4 text-sm">
                   No hay pólizas cargadas.
                 </td>
               </tr>
@@ -88,6 +112,18 @@ interface PolicyRow {
           </tbody>
         </table>
       </div>
+
+      @if (editing() !== undefined) {
+        <aside class="fixed inset-y-0 right-0 w-[450px] z-50 bg-surface dark:bg-ink shadow-2xl border-l border-line dark:border-ink-3 overflow-y-auto">
+          <app-policy-form
+            [initial]="editing() ?? null"
+            [saving]="saving()"
+            [error]="formError()"
+            (submitForm)="onSave($event)"
+            (cancel)="close()"
+          />
+        </aside>
+      }
     </section>
   `,
 })
@@ -96,8 +132,8 @@ export class InsurerPoliciesPage {
 
   /**
    * Pre-resolvemos un mapa `insurerId → name` para que el join sea O(1) por
-   * fila. Si la lista de aseguradoras o pólizas cambia (no en MVP, pero el
-   * contrato del facade es signal-based), el computed se recalcula solo.
+   * fila. Si la lista de aseguradoras o pólizas cambia, el computed se
+   * recalcula solo.
    */
   private readonly insurerMap = computed<ReadonlyMap<string, Insurer>>(() => {
     const map = new Map<string, Insurer>();
@@ -114,6 +150,61 @@ export class InsurerPoliciesPage {
       insurerName: insurers.get(policy.insurerId)?.name ?? policy.insurerId,
     }));
   });
+
+  // ---------------------------------------------------------------------------
+  // Slide-over state — three-state semantics:
+  //   undefined = panel closed
+  //   null      = creating a new policy
+  //   Policy    = editing an existing policy (state pre-loaded)
+  // ---------------------------------------------------------------------------
+
+  protected readonly editing = signal<Policy | null | undefined>(undefined);
+  protected readonly saving = signal<boolean>(false);
+  protected readonly formError = signal<string | null>(null);
+
+  protected openCreate(): void {
+    this.editing.set(null);
+    this.formError.set(null);
+  }
+
+  protected openEdit(p: Policy): void {
+    this.editing.set({ ...p });
+    this.formError.set(null);
+  }
+
+  protected close(): void {
+    this.editing.set(undefined);
+    this.formError.set(null);
+  }
+
+  protected async onSave(p: Policy): Promise<void> {
+    this.saving.set(true);
+    this.formError.set(null);
+    try {
+      const isEdit = this.editing() !== null;
+      if (isEdit) {
+        await this.facade.updatePolicy(p);
+      } else {
+        await this.facade.createPolicy(p);
+      }
+      this.close();
+    } catch (err) {
+      this.formError.set(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async onDelete(p: Policy): Promise<void> {
+    if (typeof window !== 'undefined' && !window.confirm(`Eliminar póliza ${p.number}?`)) {
+      return;
+    }
+    try {
+      await this.facade.deletePolicy(p.number);
+    } catch (err) {
+      console.error('Failed to delete policy', err);
+    }
+  }
 
   /**
    * Tono del Pill según estado canónico de la póliza. Sólo `ACTIVE` aparece
