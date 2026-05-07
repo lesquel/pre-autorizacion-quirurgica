@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 
+import { authGuard } from './shared/guards/auth.guard';
+
 /**
  * Rutas de la app. Lazy load por feature para mantener el bundle inicial chico.
  * Cada rol tiene su prefijo (/hospital, /insurer, /auditor) y un default que
@@ -9,9 +11,16 @@ import { Routes } from '@angular/router';
  * vive en `App` (ver app.ts) — cuando el RoleService cambia, navega al rol.
  */
 export const routes: Routes = [
+  {
+    path: 'login',
+    loadComponent: () =>
+      import('./features/auth/presentation/pages/login/login.page').then((m) => m.LoginPage),
+  },
+
   // Hospital
   {
     path: 'hospital',
+    canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'submit' },
       {
@@ -48,6 +57,7 @@ export const routes: Routes = [
   // Insurer (Aseguradora)
   {
     path: 'insurer',
+    canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
@@ -84,6 +94,7 @@ export const routes: Routes = [
   // Auditor médico
   {
     path: 'auditor',
+    canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'tray' },
       {
