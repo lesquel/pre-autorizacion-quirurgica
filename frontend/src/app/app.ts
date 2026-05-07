@@ -6,6 +6,12 @@ import { filter } from 'rxjs/operators';
 import { RoleService } from './core/services/role.service';
 import { Role } from './core/types/role';
 import { ShellLayout } from './layouts/shell-layout/shell-layout';
+import { AuthFacade } from './features/auth/application/facades/auth.facade';
+import { HttpCaseRepository } from './features/authorization-cases/infrastructure/repos/http-case.repository';
+import { HttpPolicyRepository } from './features/policies/infrastructure/repos/http-policy.repository';
+import { HttpCoverageRepository } from './features/policies/infrastructure/repos/http-coverage.repository';
+import { HttpInsurerRepository } from './features/policies/infrastructure/repos/http-insurer.repository';
+import { HttpProcedureRepository } from './shared/infrastructure/repos/http-procedure.repository';
 
 const ROLE_PREFIXES = ['hospital', 'insurer', 'auditor'] as const satisfies readonly Role[];
 
@@ -29,6 +35,12 @@ export class App {
   private readonly roleService = inject(RoleService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly auth = inject(AuthFacade);
+  private readonly caseRepo = inject(HttpCaseRepository);
+  private readonly policyRepo = inject(HttpPolicyRepository);
+  private readonly coverageRepo = inject(HttpCoverageRepository);
+  private readonly insurerRepo = inject(HttpInsurerRepository);
+  private readonly procedureRepo = inject(HttpProcedureRepository);
 
   constructor() {
     // URL → Role: cuando navegamos, sync el rol activo en el service.
@@ -50,6 +62,19 @@ export class App {
       const currentRolePath = this.router.url.split('/')[1];
       if (currentRolePath !== role) {
         void this.router.navigate(['/', role]);
+      }
+    });
+
+    // After auth, bootstrap the read-only caches in parallel.
+    effect(() => {
+      if (this.auth.isAuthenticated()) {
+        Promise.all([
+          this.caseRepo.loadAll(),
+          this.policyRepo.loadAll(),
+          this.coverageRepo.loadAll(),
+          this.insurerRepo.loadAll(),
+          this.procedureRepo.list(),
+        ]).catch(() => undefined);
       }
     });
   }

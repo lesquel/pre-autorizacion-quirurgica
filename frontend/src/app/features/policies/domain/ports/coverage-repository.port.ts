@@ -13,4 +13,9 @@ export abstract class CoverageRepository {
 
   /** Lista las coberturas asociadas a la póliza `policyNumber`. */
   abstract listForPolicy(policyNumber: string): readonly Coverage[];
+
+  abstract replaceForPolicy(
+    policyNumber: string,
+    coverages: readonly Coverage[],
+  ): Promise<readonly Coverage[]>;
 }

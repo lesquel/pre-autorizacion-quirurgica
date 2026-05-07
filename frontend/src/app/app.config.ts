@@ -9,6 +9,16 @@ import { AuthRepository } from './features/auth/domain/ports/auth-repository.por
 import { TokenStore } from './features/auth/domain/ports/token-store.port';
 import { HttpAuthRepository } from './features/auth/infrastructure/repos/http-auth.repository';
 import { InMemoryTokenStore } from './features/auth/infrastructure/stores/in-memory-token.store';
+import { CaseRepository } from './features/authorization-cases/domain/ports/case-repository.port';
+import { HttpCaseRepository } from './features/authorization-cases/infrastructure/repos/http-case.repository';
+import { PolicyRepository } from './features/policies/domain/ports/policy-repository.port';
+import { CoverageRepository } from './features/policies/domain/ports/coverage-repository.port';
+import { InsurerRepository } from './features/policies/domain/ports/insurer-repository.port';
+import { HttpPolicyRepository } from './features/policies/infrastructure/repos/http-policy.repository';
+import { HttpCoverageRepository } from './features/policies/infrastructure/repos/http-coverage.repository';
+import { HttpInsurerRepository } from './features/policies/infrastructure/repos/http-insurer.repository';
+import { ProcedureRepository } from './shared/domain/ports/procedure-repository.port';
+import { HttpProcedureRepository } from './shared/infrastructure/repos/http-procedure.repository';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,5 +27,10 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withFetch(), withInterceptors([authInterceptor, errorInterceptor])),
     { provide: AuthRepository, useClass: HttpAuthRepository },
     { provide: TokenStore, useClass: InMemoryTokenStore },
+    { provide: CaseRepository, useClass: HttpCaseRepository },
+    { provide: PolicyRepository, useClass: HttpPolicyRepository },
+    { provide: CoverageRepository, useClass: HttpCoverageRepository },
+    { provide: InsurerRepository, useClass: HttpInsurerRepository },
+    { provide: ProcedureRepository, useClass: HttpProcedureRepository },
   ],
 };

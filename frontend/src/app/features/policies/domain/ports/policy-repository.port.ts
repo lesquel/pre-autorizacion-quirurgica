@@ -17,4 +17,8 @@ export abstract class PolicyRepository {
 
   /** Busca una póliza por su `number`; `undefined` si no existe. */
   abstract findByNumber(n: string): Policy | undefined;
+
+  abstract create(p: Policy): Promise<Policy>;
+  abstract update(p: Policy): Promise<Policy>;
+  abstract delete(number: string): Promise<void>;
 }
