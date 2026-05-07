@@ -14,10 +14,10 @@ from pre_autorizacion.features.authorization_cases.application.use_cases.resolve
 )
 from pre_autorizacion.features.authorization_cases.application.use_cases.submit_case import (
     CoverageNotFoundError,
-    PolicyNotFoundError,
     SubmitCaseInput,
     SubmitCaseUseCase,
 )
+from pre_autorizacion.features.policies.domain import PolicyNotFoundError
 
 __all__ = [
     "CaseNotFoundError",

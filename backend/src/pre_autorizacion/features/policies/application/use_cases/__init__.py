@@ -6,8 +6,8 @@ from pre_autorizacion.features.policies.application.use_cases.get_dashboard_metr
 )
 from pre_autorizacion.features.policies.application.use_cases.get_policy import (
     GetPolicyUseCase,
-    PolicyNotFoundError,
 )
+from pre_autorizacion.features.policies.domain import PolicyNotFoundError
 from pre_autorizacion.features.policies.application.use_cases.list_coverages import (
     ListCoveragesUseCase,
 )

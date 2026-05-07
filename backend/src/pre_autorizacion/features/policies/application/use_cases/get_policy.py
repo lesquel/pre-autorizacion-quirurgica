@@ -5,17 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pre_autorizacion.shared.domain.errors import NotFoundError
+from pre_autorizacion.features.policies.domain import PolicyNotFoundError
 
 if TYPE_CHECKING:
     from pre_autorizacion.features.policies.domain.entities import Policy
     from pre_autorizacion.features.policies.domain.ports import PolicyRepository
-
-
-class PolicyNotFoundError(NotFoundError):
-    """No existe una póliza con ese número."""
-
-    title = "Policy not found"
 
 
 @dataclass(slots=True)

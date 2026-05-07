@@ -42,6 +42,7 @@ from pre_autorizacion.features.authorization_cases.domain.value_objects import (
 from pre_autorizacion.features.authorization_cases.infrastructure.decision.rule_engine import (
     evaluate_authorization,
 )
+from pre_autorizacion.features.policies.domain import PolicyNotFoundError
 from pre_autorizacion.shared.domain.errors import NotFoundError
 
 if TYPE_CHECKING:
@@ -59,12 +60,6 @@ if TYPE_CHECKING:
 
 
 # ─── Errores específicos del flow ──────────────────────────────────────────
-
-
-class PolicyNotFoundError(NotFoundError):
-    """No existe la póliza referenciada por el caso."""
-
-    title = "Policy not found"
 
 
 class CoverageNotFoundError(NotFoundError):
