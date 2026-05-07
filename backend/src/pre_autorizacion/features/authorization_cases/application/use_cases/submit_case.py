@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -266,10 +265,9 @@ class SubmitCaseUseCase:
         policy: Policy,
         coverage: Coverage,
     ) -> tuple[AgentDecision, tuple[TraceStep, ...]]:
-        """Despacha al flow real (B3) o al flow MOCK (MVP)."""
+        """Despacha al flow real (LangGraph) o al flow MOCK."""
         if self.agent_orchestrator is None:
             return await self._mock_decide(input, policy, coverage)
-        # TODO: B3 — delegar al `AgentOrchestrator` real, drenar el AsyncIterator.
         return await self._run_orchestrator(input, policy, coverage, self.agent_orchestrator)
 
     async def _mock_decide(
@@ -326,8 +324,9 @@ class SubmitCaseUseCase:
     ) -> tuple[AgentDecision, tuple[TraceStep, ...]]:
         """Drena el `AsyncIterator[AgentEvent]` y arma `(decision, trace)`.
 
-        TODO B3: emitir los `AgentStepEvent` por SSE en otro endpoint. Acá
-        agregamos los pasos al trace local y devolvemos el resultado terminal.
+        El SSE endpoint (`/api/v1/cases/{id}/events`, post-MVP) puede
+        republicar los `AgentStepEvent` en tiempo real; este use case solo
+        consume el resultado terminal para persistirlo.
         """
         request = AgentRunRequest(
             report=input.report,
@@ -336,15 +335,12 @@ class SubmitCaseUseCase:
             scenario_key=input.scenario_key,
         )
         steps: list[TraceStep] = []
-        events: AsyncIterator[
-            AgentStepEvent | AgentDoneEvent | AgentErrorEvent
-        ] = orchestrator.run(request)
-        async for event in events:
+        async for event in orchestrator.run(request):
             match event:
                 case AgentStepEvent(step=step):
                     steps.append(step)
                 case AgentDoneEvent(decision=decision, trace=trace):
                     return decision, trace if trace else tuple(steps)
-                case AgentErrorEvent(error=err, trace=trace):
+                case AgentErrorEvent(error=err):
                     raise RuntimeError(f"Agent run failed: {err}") from None
         raise RuntimeError("Agent orchestrator finished without terminal event")

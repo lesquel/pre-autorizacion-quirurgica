@@ -62,12 +62,18 @@ def _get_submit_use_case(
     policy_repo: PolicyRepositoryDep,
     coverage_repo: CoverageRepositoryDep,
 ) -> SubmitCaseUseCase:
-    """Arma el use case `SubmitCaseUseCase` (mock decision flow en MVP)."""
+    """Arma el `SubmitCaseUseCase`.
+
+    Inyecta el `AgentOrchestrator` LangGraph cuando hay credenciales LLM
+    configuradas; sino, el use case usa el flow MOCK determinístico.
+    """
+    from pre_autorizacion.config.di import get_agent_orchestrator  # noqa: PLC0415
+
     return SubmitCaseUseCase(
         case_repository=case_repo,
         policy_repository=policy_repo,
         coverage_repository=coverage_repo,
-        agent_orchestrator=None,  # TODO B3: inyectar el adapter LangGraph.
+        agent_orchestrator=get_agent_orchestrator(),
     )
 
 

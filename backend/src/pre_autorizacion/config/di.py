@@ -3,7 +3,8 @@
 Único lugar donde se eligen adapters concretos:
 - Notion vs in-memory (según `settings.use_notion` y db ids).
 - LocalFsAdapter para `FileStorage` (siempre).
-- LLMProvider / VisionExtractor → placeholders `_Null*` hasta Phase B3.
+- LLMProvider / VisionExtractor → DeepSeek / Gemini cuando hay api keys, y
+  placeholders `_Null*` que fallan ruidosamente cuando no.
 
 Cada factory está cacheada con `lru_cache` keyed sobre el id del settings, así
 que durante toda la vida del proceso devuelve la misma instancia.
@@ -23,8 +24,20 @@ from pre_autorizacion.config.settings import Settings, get_settings
 from pre_autorizacion.features.auth.application.jwt_service import JwtService
 from pre_autorizacion.features.auth.domain.ports import UserRepository
 from pre_autorizacion.features.auth.infrastructure.in_memory_user_store import InMemoryUserStore
+from pre_autorizacion.features.authorization_cases.domain.ports.agent_orchestrator import (
+    AgentOrchestrator,
+)
+from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (
+    AuthorizationDecisionMaker,
+)
 from pre_autorizacion.features.authorization_cases.domain.ports.case_repository import (
     CaseRepository,
+)
+from pre_autorizacion.features.authorization_cases.domain.ports.medical_report_extractor import (
+    MedicalReportExtractor,
+)
+from pre_autorizacion.features.authorization_cases.domain.ports.response_generator import (
+    ResponseGenerator,
 )
 from pre_autorizacion.features.policies.domain.ports.coverage_repository import CoverageRepository
 from pre_autorizacion.features.policies.domain.ports.insurer_repository import InsurerRepository
@@ -221,24 +234,134 @@ def get_case_repository(settings: Settings | None = None) -> CaseRepository:
 
 @lru_cache(maxsize=1)
 def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
-    """LLM provider — `_NullLLMProvider` hasta Phase B3.
+    """LLM provider — DeepSeek (default) cuando hay API key, sino `_NullLLMProvider`.
 
-    TODO B3: si `settings.text_provider == "deepseek"` y hay api key, devolver
-    `DeepSeekAdapter(settings)`; idem para `openai` y `anthropic`.
+    Wired in B3: si `settings.text_provider == "deepseek"` y hay api key,
+    devuelve `DeepSeekLLMAdapter`. OpenAI/Anthropic quedan pendientes hasta
+    que haya adapters concretos para ellos.
     """
-    _ = settings or get_settings()
+    s = settings or get_settings()
+    if s.text_provider == "deepseek" and s.deepseek_api_key:
+        from pre_autorizacion.shared.llm.adapters.deepseek_adapter import (  # noqa: PLC0415
+            DeepSeekLLMAdapter,
+        )
+
+        return DeepSeekLLMAdapter(
+            api_key=s.deepseek_api_key,
+            model=s.text_model,
+            base_url=s.deepseek_base_url,
+        )
     return _NullLLMProvider()
 
 
 @lru_cache(maxsize=1)
 def get_vision_extractor(settings: Settings | None = None) -> VisionExtractor:
-    """Vision extractor — `_NullVisionExtractor` hasta Phase B3.
+    """Vision extractor — Gemini (default) cuando hay API key, sino `_NullVisionExtractor`.
 
-    TODO B3: si `settings.vision_provider == "gemini"` y hay api key, devolver
-    `GeminiVisionAdapter(settings)`.
+    Wired in B3: si `settings.vision_provider == "gemini"` y hay
+    `google_api_key`, devuelve `GeminiVisionAdapter`.
     """
-    _ = settings or get_settings()
+    s = settings or get_settings()
+    if s.vision_provider == "gemini" and s.google_api_key:
+        from pre_autorizacion.shared.vision.adapters.gemini_adapter import (  # noqa: PLC0415
+            GeminiVisionAdapter,
+        )
+
+        return GeminiVisionAdapter(
+            api_key=s.google_api_key,
+            model=s.vision_model,
+        )
     return _NullVisionExtractor()
+
+
+@lru_cache(maxsize=1)
+def get_text_extractor(settings: Settings | None = None) -> MedicalReportExtractor:
+    """Extractor high-level para informes en TEXTO (compone `LLMProvider`)."""
+    s = settings or get_settings()
+    from pre_autorizacion.features.authorization_cases.infrastructure.extractors.text_extractor import (  # noqa: PLC0415
+        TextMedicalReportExtractor,
+    )
+
+    return TextMedicalReportExtractor(get_llm_provider(s))
+
+
+@lru_cache(maxsize=1)
+def get_pdf_extractor(settings: Settings | None = None) -> MedicalReportExtractor:
+    """Extractor high-level para informes en PDF (compone `VisionExtractor` + storage)."""
+    s = settings or get_settings()
+    from pre_autorizacion.features.authorization_cases.infrastructure.extractors.pdf_extractor import (  # noqa: PLC0415
+        PdfMedicalReportExtractor,
+    )
+
+    return PdfMedicalReportExtractor(
+        get_vision_extractor(s),
+        storage=get_file_storage(s),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_decision_maker(settings: Settings | None = None) -> AuthorizationDecisionMaker:
+    """`AuthorizationDecisionMaker` LLM-based (compone `LLMProvider`)."""
+    s = settings or get_settings()
+    from pre_autorizacion.features.authorization_cases.infrastructure.decision.llm_decision_maker import (  # noqa: PLC0415
+        LlmAuthorizationDecisionMaker,
+    )
+
+    return LlmAuthorizationDecisionMaker(
+        get_llm_provider(s),
+        model_name=s.text_model,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_response_generator(settings: Settings | None = None) -> ResponseGenerator:
+    """`ResponseGenerator` LLM-based (compone `LLMProvider`)."""
+    s = settings or get_settings()
+    from pre_autorizacion.features.authorization_cases.infrastructure.decision.llm_response_generator import (  # noqa: PLC0415
+        LlmResponseGenerator,
+    )
+
+    return LlmResponseGenerator(get_llm_provider(s))
+
+
+@lru_cache(maxsize=1)
+def get_agent_orchestrator(settings: Settings | None = None) -> AgentOrchestrator | None:
+    """`AgentOrchestrator` LangGraph-based.
+
+    Devuelve `None` cuando NO hay credenciales LLM/Vision configuradas — el
+    `SubmitCaseUseCase` cae al flow MOCK determinístico en ese caso.
+
+    Política:
+    - Si NO hay `deepseek_api_key` (o key del provider de texto) → `None`.
+      No tiene sentido armar el grafo si el LLM va a fallar en cada corrida.
+    - Si hay key de texto pero NO hay `google_api_key`, igual armamos el
+      orchestrator: el grafo solo invoca al pdf_extractor cuando llega un
+      report PDF. Reports en texto siguen funcionando con texto solo.
+    """
+    s = settings or get_settings()
+
+    # Sin LLM de texto el grafo no puede correr el nodo `make_decision`.
+    has_text_key = bool(
+        (s.text_provider == "deepseek" and s.deepseek_api_key)
+        or (s.text_provider == "openai" and s.openai_api_key)
+        or (s.text_provider == "anthropic" and s.anthropic_api_key)
+    )
+    if not has_text_key:
+        return None
+
+    from pre_autorizacion.features.authorization_cases.application.agent.graph import (  # noqa: PLC0415
+        build_graph,
+    )
+    from pre_autorizacion.features.authorization_cases.infrastructure.agents.langgraph_orchestrator import (  # noqa: PLC0415
+        LangGraphAgentOrchestrator,
+    )
+
+    return LangGraphAgentOrchestrator(
+        graph=build_graph(),
+        extractor_text=get_text_extractor(s),
+        extractor_pdf=get_pdf_extractor(s),
+        decision_maker=get_decision_maker(s),
+    )
 
 
 def reset_container() -> None:
@@ -252,16 +375,26 @@ def reset_container() -> None:
     get_case_repository.cache_clear()
     get_llm_provider.cache_clear()
     get_vision_extractor.cache_clear()
+    get_text_extractor.cache_clear()
+    get_pdf_extractor.cache_clear()
+    get_decision_maker.cache_clear()
+    get_response_generator.cache_clear()
+    get_agent_orchestrator.cache_clear()
 
 
 __all__ = [
+    "get_agent_orchestrator",
     "get_case_repository",
     "get_coverage_repository",
+    "get_decision_maker",
     "get_file_storage",
     "get_insurer_repository",
     "get_jwt_service",
     "get_llm_provider",
+    "get_pdf_extractor",
     "get_policy_repository",
+    "get_response_generator",
+    "get_text_extractor",
     "get_user_repository",
     "get_vision_extractor",
     "reset_container",
