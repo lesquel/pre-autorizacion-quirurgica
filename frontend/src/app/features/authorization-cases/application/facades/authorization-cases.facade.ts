@@ -114,8 +114,12 @@ export class AuthorizationCasesFacade {
             // terminal acumulada vía el use case.
             return;
           }
+          // The HTTP adapter encodes the real caseId via a sentinel in the
+          // first step's `detail`. If present, hoist it into the run.
+          const idFromStep = readCaseIdSentinel(event.step.detail);
           this._currentRun.set({
             ...current,
+            caseId: idFromStep ?? current.caseId,
             trace: [...current.trace, event.step],
           });
           return;
@@ -180,4 +184,10 @@ export class AuthorizationCasesFacade {
   getCaseByIdSnapshot(id: string): AuthorizationCase | undefined {
     return this.getCaseByIdUC.execute(id);
   }
+}
+
+function readCaseIdSentinel(detail: string | undefined): string | undefined {
+  if (!detail) return undefined;
+  const m = /^caseId:([A-Z0-9-]+)/.exec(detail);
+  return m ? m[1] : undefined;
 }

@@ -9,7 +9,9 @@ import { AuthRepository } from './features/auth/domain/ports/auth-repository.por
 import { TokenStore } from './features/auth/domain/ports/token-store.port';
 import { HttpAuthRepository } from './features/auth/infrastructure/repos/http-auth.repository';
 import { InMemoryTokenStore } from './features/auth/infrastructure/stores/in-memory-token.store';
+import { AgentOrchestrator } from './features/authorization-cases/domain/ports/agent-orchestrator.port';
 import { CaseRepository } from './features/authorization-cases/domain/ports/case-repository.port';
+import { HttpAgentAdapter } from './features/authorization-cases/infrastructure/agents/http-agent.adapter';
 import { HttpCaseRepository } from './features/authorization-cases/infrastructure/repos/http-case.repository';
 import { PolicyRepository } from './features/policies/domain/ports/policy-repository.port';
 import { CoverageRepository } from './features/policies/domain/ports/coverage-repository.port';
@@ -28,6 +30,7 @@ export const appConfig: ApplicationConfig = {
     { provide: AuthRepository, useClass: HttpAuthRepository },
     { provide: TokenStore, useClass: InMemoryTokenStore },
     { provide: CaseRepository, useClass: HttpCaseRepository },
+    { provide: AgentOrchestrator, useClass: HttpAgentAdapter },
     { provide: PolicyRepository, useClass: HttpPolicyRepository },
     { provide: CoverageRepository, useClass: HttpCoverageRepository },
     { provide: InsurerRepository, useClass: HttpInsurerRepository },
