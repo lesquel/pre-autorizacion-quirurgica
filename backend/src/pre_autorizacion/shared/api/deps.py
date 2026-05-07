@@ -27,6 +27,7 @@ from pre_autorizacion.config.di import (
     get_jwt_service,
     get_llm_provider,
     get_policy_repository,
+    get_procedure_repository,
     get_user_repository,
     get_vision_extractor,
 )
@@ -41,6 +42,7 @@ from pre_autorizacion.features.authorization_cases.domain.ports.case_repository 
 from pre_autorizacion.features.policies.domain.ports.coverage_repository import CoverageRepository
 from pre_autorizacion.features.policies.domain.ports.insurer_repository import InsurerRepository
 from pre_autorizacion.features.policies.domain.ports.policy_repository import PolicyRepository
+from pre_autorizacion.features.procedures.domain.ports import ProcedureRepository
 from pre_autorizacion.shared.domain.errors import AuthError, ForbiddenError
 from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
 from pre_autorizacion.shared.storage.ports.file_storage import FileStorage
@@ -61,6 +63,7 @@ JwtServiceDep = Annotated[JwtService, Depends(get_jwt_service)]
 UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
 CaseRepositoryDep = Annotated[CaseRepository, Depends(get_case_repository)]
 PolicyRepositoryDep = Annotated[PolicyRepository, Depends(get_policy_repository)]
+ProcedureRepositoryDep = Annotated[ProcedureRepository, Depends(get_procedure_repository)]
 CoverageRepositoryDep = Annotated[CoverageRepository, Depends(get_coverage_repository)]
 InsurerRepositoryDep = Annotated[InsurerRepository, Depends(get_insurer_repository)]
 FileStorageDep = Annotated[FileStorage, Depends(get_file_storage)]
@@ -122,6 +125,7 @@ __all__ = [
     "JwtServiceDep",
     "LLMProviderDep",
     "PolicyRepositoryDep",
+    "ProcedureRepositoryDep",
     "SettingsDep",
     "UserRepositoryDep",
     "VisionExtractorDep",
