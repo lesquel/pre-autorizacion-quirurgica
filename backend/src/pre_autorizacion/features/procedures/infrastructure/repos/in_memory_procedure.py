@@ -1,4 +1,8 @@
-"""InMemoryProcedureRepository — fallback adapter, seeded con `SEED_PROCEDURES`."""
+"""InMemoryProcedureRepository — fallback adapter, seeded con `SEED_PROCEDURES`.
+
+`async def` aunque internamente sea sincrónico: respeta el port y permite
+swap transparente con el adapter Notion (que sí hace HTTP I/O).
+"""
 
 from __future__ import annotations
 
@@ -20,8 +24,6 @@ class InMemoryProcedureRepository(ProcedureRepository):
 
     async def search(self, query: str) -> tuple[Procedure, ...]:
         q = query.strip().lower()
-        if not q:
-            return self._procedures
         return tuple(
             p for p in self._procedures
             if q in p.code.lower() or q in p.name.lower()

@@ -16,4 +16,9 @@ class ProcedureRepository(ABC):
 
     @abstractmethod
     async def search(self, query: str) -> tuple[Procedure, ...]:
-        """Filtra por substring case-insensitive en `code` o `name`."""
+        """Filtra por substring case-insensitive en `code` o `name`.
+
+        Contrato: el caller (use case) DEBE garantizar que `query` no sea
+        vacío ni solo whitespace. Los adapters NO están obligados a manejar
+        ese caso — invocar con blank es comportamiento indefinido.
+        """
