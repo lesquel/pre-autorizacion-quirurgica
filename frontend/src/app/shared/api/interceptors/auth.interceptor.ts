@@ -1,16 +1,20 @@
 import { HttpErrorResponse, type HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 
 import { TokenStore } from '../../../features/auth/domain/ports/token-store.port';
 import { RefreshSessionUseCase } from '../../../features/auth/application/use-cases/refresh-session.use-case';
 
+const SKIP_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout'] as const;
+const RETRY_HEADER = 'X-Auth-Retry';
+
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const store = inject(TokenStore);
   const refreshUC = inject(RefreshSessionUseCase);
+  const router = inject(Router);
 
-  // Don't attach to /auth/login or /auth/refresh — they're the entry points.
-  if (req.url.endsWith('/auth/login') || req.url.endsWith('/auth/refresh')) {
+  if (SKIP_PATHS.some((p) => req.url.endsWith(p))) {
     return next(req);
   }
 
@@ -21,13 +25,29 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(authed).pipe(
     catchError((err: unknown) => {
-      if (err instanceof HttpErrorResponse && err.status === 401 && tokens) {
+      if (
+        err instanceof HttpErrorResponse &&
+        err.status === 401 &&
+        tokens &&
+        !req.headers.has(RETRY_HEADER)
+      ) {
         return refreshUC.execute().pipe(
           switchMap((res) =>
             next(
-              req.clone({ setHeaders: { Authorization: `Bearer ${res.accessToken}` } }),
+              req.clone({
+                setHeaders: {
+                  Authorization: `Bearer ${res.accessToken}`,
+                  [RETRY_HEADER]: '1',
+                },
+              }),
             ),
           ),
+          catchError((refreshErr: unknown) => {
+            // Refresh itself failed — clear tokens and bounce to /login.
+            store.clear();
+            void router.navigate(['/login']);
+            return throwError(() => refreshErr);
+          }),
         );
       }
       return throwError(() => err);
