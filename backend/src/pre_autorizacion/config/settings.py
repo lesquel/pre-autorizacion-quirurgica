@@ -80,6 +80,7 @@ class Settings(BaseSettings):
 
     # ── Storage ──────────────────────────────────────────────────────────
     uploads_dir: Path = Path("./var/uploads")
+    max_upload_mb: int = 10
 
     # ── CORS ─────────────────────────────────────────────────────────────
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:4200"])
