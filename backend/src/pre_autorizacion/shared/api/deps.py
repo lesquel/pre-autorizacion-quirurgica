@@ -58,17 +58,57 @@ def get_settings_dep() -> Settings:
     return get_settings()
 
 
+def _get_jwt_service() -> JwtService:
+    return get_jwt_service()
+
+
+def _get_user_repository() -> UserRepository:
+    return get_user_repository()
+
+
+def _get_case_repository() -> CaseRepository:
+    return get_case_repository()
+
+
+def _get_policy_repository() -> PolicyRepository:
+    return get_policy_repository()
+
+
+def _get_procedure_repository() -> ProcedureRepository:
+    return get_procedure_repository()
+
+
+def _get_coverage_repository() -> CoverageRepository:
+    return get_coverage_repository()
+
+
+def _get_insurer_repository() -> InsurerRepository:
+    return get_insurer_repository()
+
+
+def _get_file_storage() -> FileStorage:
+    return get_file_storage()
+
+
+def _get_llm_provider() -> LLMProvider:
+    return get_llm_provider()
+
+
+def _get_vision_extractor() -> VisionExtractor:
+    return get_vision_extractor()
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
-JwtServiceDep = Annotated[JwtService, Depends(get_jwt_service)]
-UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
-CaseRepositoryDep = Annotated[CaseRepository, Depends(get_case_repository)]
-PolicyRepositoryDep = Annotated[PolicyRepository, Depends(get_policy_repository)]
-ProcedureRepositoryDep = Annotated[ProcedureRepository, Depends(get_procedure_repository)]
-CoverageRepositoryDep = Annotated[CoverageRepository, Depends(get_coverage_repository)]
-InsurerRepositoryDep = Annotated[InsurerRepository, Depends(get_insurer_repository)]
-FileStorageDep = Annotated[FileStorage, Depends(get_file_storage)]
-LLMProviderDep = Annotated[LLMProvider, Depends(get_llm_provider)]
-VisionExtractorDep = Annotated[VisionExtractor, Depends(get_vision_extractor)]
+JwtServiceDep = Annotated[JwtService, Depends(_get_jwt_service)]
+UserRepositoryDep = Annotated[UserRepository, Depends(_get_user_repository)]
+CaseRepositoryDep = Annotated[CaseRepository, Depends(_get_case_repository)]
+PolicyRepositoryDep = Annotated[PolicyRepository, Depends(_get_policy_repository)]
+ProcedureRepositoryDep = Annotated[ProcedureRepository, Depends(_get_procedure_repository)]
+CoverageRepositoryDep = Annotated[CoverageRepository, Depends(_get_coverage_repository)]
+InsurerRepositoryDep = Annotated[InsurerRepository, Depends(_get_insurer_repository)]
+FileStorageDep = Annotated[FileStorage, Depends(_get_file_storage)]
+LLMProviderDep = Annotated[LLMProvider, Depends(_get_llm_provider)]
+VisionExtractorDep = Annotated[VisionExtractor, Depends(_get_vision_extractor)]
 
 
 async def get_current_user(
