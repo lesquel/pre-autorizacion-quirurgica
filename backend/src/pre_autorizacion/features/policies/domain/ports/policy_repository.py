@@ -1,14 +1,4 @@
-"""PolicyRepository — port read-only de pólizas.
-
-Port directo de `frontend/src/app/features/policies/domain/ports/policy-repository.port.ts`.
-
-Decisiones de mapping TS → Python:
-- `list()`/`findByNumber()` síncronos en el front (in-memory signal). En el back
-  se modelan **async** porque el adapter real es Notion (HTTP I/O). En in-memory
-  el adapter simplemente devuelve el resultado con `async def` (zero overhead).
-- `readonly Policy[]` → `tuple[Policy, ...]` (tuple inmutable, hashable).
-- `Policy | undefined` → `Policy | None`.
-"""
+"""PolicyRepository — port para pólizas (read + CRUD)."""
 
 from __future__ import annotations
 
@@ -18,12 +8,20 @@ from pre_autorizacion.features.policies.domain.entities import Policy
 
 
 class PolicyRepository(ABC):
-    """Port read-only para pólizas. Adapter típico → Notion."""
+    @abstractmethod
+    async def list(self) -> tuple[Policy, ...]: ...
 
     @abstractmethod
-    async def list(self) -> tuple[Policy, ...]:
-        """Lista todas las pólizas conocidas."""
+    async def find_by_number(self, n: str) -> Policy | None: ...
 
     @abstractmethod
-    async def find_by_number(self, n: str) -> Policy | None:
-        """Busca una póliza por su `number`; devuelve `None` si no existe."""
+    async def create(self, policy: Policy) -> Policy:
+        """Persist a new policy. Raises if `policy.number` already exists."""
+
+    @abstractmethod
+    async def update(self, policy: Policy) -> Policy:
+        """Replace the policy identified by `policy.number`. Raises if missing."""
+
+    @abstractmethod
+    async def delete(self, number: str) -> None:
+        """Remove the policy by number. No-op if it doesn't exist (idempotent)."""

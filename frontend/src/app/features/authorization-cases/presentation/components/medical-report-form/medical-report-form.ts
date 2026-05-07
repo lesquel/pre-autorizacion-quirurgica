@@ -23,11 +23,12 @@ export interface MedicalReportFormSubmit {
   readonly policyNumber: string;
   readonly report: {
     readonly format: 'text' | 'pdf';
-    readonly content: string;
+    readonly content: string;          // For PDF mode this becomes the placeholder string `"[<filename>]"`
     readonly procedureSolicitedHint?: string;
     readonly diagnosis?: string;
     readonly attendingDoctor?: string;
   };
+  readonly file?: File;                  // Set only in PDF mode
 }
 
 /**
@@ -150,24 +151,42 @@ export interface MedicalReportFormSubmit {
         />
       </label>
 
-      <label class="flex flex-col gap-1.5">
-        <span
-          class="font-mono text-[10px] uppercase tracking-wider text-ink-3 dark:text-ink-5"
-        >
-          Informe médico
-        </span>
-        <textarea
-          rows="12"
-          class="px-3 py-2 bg-bg-2 dark:bg-ink-2 border border-line dark:border-ink-3 text-ink dark:text-bg font-mono text-xs leading-relaxed focus:outline-none focus:border-info resize-y"
-          [value]="content()"
-          (input)="content.set($any($event.target).value)"
-          [placeholder]="
-            format() === 'pdf'
-              ? '[informe-escaneado.pdf · stub para Vision]'
-              : 'Pegue o escriba el informe médico aquí…'
-          "
-        ></textarea>
-      </label>
+      @if (format() === 'pdf') {
+        <label class="flex flex-col gap-1.5">
+          <span class="font-mono text-[10px] uppercase tracking-wider text-ink-3 dark:text-ink-5">
+            Archivo PDF (≤ 10 MB)
+          </span>
+          <input
+            type="file"
+            accept="application/pdf"
+            class="text-sm"
+            (change)="onFileChange($event)"
+          />
+          @if (file()) {
+            <span class="text-xs text-ink-3 dark:text-ink-5 mt-1">
+              {{ file()!.name }} · {{ formatBytes(file()!.size) }}
+            </span>
+          }
+          @if (fileError()) {
+            <span class="text-xs text-error mt-1">{{ fileError() }}</span>
+          }
+        </label>
+      } @else {
+        <label class="flex flex-col gap-1.5">
+          <span
+            class="font-mono text-[10px] uppercase tracking-wider text-ink-3 dark:text-ink-5"
+          >
+            Informe médico
+          </span>
+          <textarea
+            rows="12"
+            class="px-3 py-2 bg-bg-2 dark:bg-ink-2 border border-line dark:border-ink-3 text-ink dark:text-bg font-mono text-xs leading-relaxed focus:outline-none focus:border-info resize-y"
+            [value]="content()"
+            (input)="content.set($any($event.target).value)"
+            placeholder="Pegue o escriba el informe médico aquí…"
+          ></textarea>
+        </label>
+      }
 
       <div class="flex items-center justify-between gap-3 pt-2">
         <span
@@ -211,13 +230,17 @@ export class MedicalReportForm {
   protected readonly procedureSolicitedHint = signal('');
   protected readonly diagnosis = signal('');
   protected readonly attendingDoctor = signal('');
+  protected readonly file = signal<File | null>(null);
+  protected readonly fileError = signal<string | null>(null);
 
-  protected readonly valid = computed(
-    () =>
+  protected readonly valid = computed(() => {
+    const baseValid =
       this.patientId().trim().length > 0 &&
-      this.policyNumber().trim().length > 0 &&
-      this.content().trim().length > 0,
-  );
+      this.policyNumber().trim().length > 0;
+    if (!baseValid) return false;
+    if (this.format() === 'pdf') return this.file() !== null;
+    return this.content().trim().length > 0;
+  });
 
   constructor() {
     // Sync prefill → signals locales. Se dispara cada vez que el padre
@@ -242,16 +265,18 @@ export class MedicalReportForm {
     if (!this.valid() || this.submitting()) {
       return;
     }
+    const isPdf = this.format() === 'pdf';
     this.submit.emit({
       patientId: this.patientId().trim(),
       policyNumber: this.policyNumber().trim(),
       report: {
         format: this.format(),
-        content: this.content(),
+        content: isPdf ? `[${this.file()!.name}]` : this.content(),
         procedureSolicitedHint: this.procedureSolicitedHint().trim() || undefined,
         diagnosis: this.diagnosis().trim() || undefined,
         attendingDoctor: this.attendingDoctor().trim() || undefined,
       },
+      file: isPdf ? this.file()! : undefined,
     });
   }
 
@@ -263,5 +288,35 @@ export class MedicalReportForm {
     this.procedureSolicitedHint.set('');
     this.diagnosis.set('');
     this.attendingDoctor.set('');
+    this.file.set(null);
+    this.fileError.set(null);
+  }
+
+  protected onFileChange(evt: Event): void {
+    const input = evt.target as HTMLInputElement;
+    const f = input.files?.[0] ?? null;
+    if (!f) {
+      this.file.set(null);
+      this.fileError.set(null);
+      return;
+    }
+    if (f.type !== 'application/pdf') {
+      this.file.set(null);
+      this.fileError.set('El archivo debe ser application/pdf.');
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      this.file.set(null);
+      this.fileError.set('El archivo supera 10 MB.');
+      return;
+    }
+    this.file.set(f);
+    this.fileError.set(null);
+  }
+
+  protected formatBytes(b: number): string {
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+    return `${(b / 1024 / 1024).toFixed(1)} MB`;
   }
 }

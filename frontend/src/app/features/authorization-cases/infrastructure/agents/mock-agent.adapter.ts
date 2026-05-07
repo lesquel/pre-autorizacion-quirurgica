@@ -10,6 +10,9 @@ import {
 } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+import { findCoverage, findPolicy } from '../../../../shared/domain/helpers/finders';
+import { SEED } from '../../../../shared/fixtures/seed';
+import type { Coverage, Policy } from '../../../policies/domain/entities';
 import type { MedicalReport } from '../../domain/entities/medical-report';
 import type {
   AgentEvent,
@@ -124,13 +127,24 @@ function emitPlannedStep(
 }
 
 function buildContext(req: AgentRunRequest, _scenarioKey: string): BuildContext {
+  // Resolve policy and coverage from SEED (mock-only path — backend resolves in production).
+  const policy: Policy = findPolicy(req.policyNumber, SEED.policies) ?? SEED.policies[0];
+  const coverage: Coverage =
+    findCoverage(
+      {
+        policyNumber: req.policyNumber,
+        procedureCode: req.report.procedureSolicitedHint ?? '?',
+      },
+      SEED.coverages,
+    ) ?? SEED.coverages[0];
+
   return {
     report: req.report,
-    policy: req.policy,
-    coverage: req.coverage,
+    policy,
+    coverage,
     attachedDocs: extractAttachedDocs(req.report),
-    procedureName: req.report.diagnosis ?? req.coverage.procedureCode,
-    procedureCode: req.report.procedureSolicitedHint ?? req.coverage.procedureCode,
+    procedureName: req.report.diagnosis ?? coverage.procedureCode,
+    procedureCode: req.report.procedureSolicitedHint ?? coverage.procedureCode,
     evaluationDate: DEFAULT_EVALUATION_DATE,
   };
 }

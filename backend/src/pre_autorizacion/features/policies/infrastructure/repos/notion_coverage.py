@@ -33,3 +33,12 @@ class NotionCoverageRepository(CoverageRepository):
         }
         pages = await self._client.query_database(self._database_id, filter=filter_)
         return tuple(notion_to_coverage(page) for page in pages)
+
+    async def replace_for_policy(  # type: ignore[override]
+        self,
+        policy_number: str,
+        coverages: tuple[Coverage, ...],
+    ) -> tuple[Coverage, ...]:
+        raise NotImplementedError(
+            "CRUD on Notion is out of scope for v1. Use InMemoryCoverageRepository."
+        )

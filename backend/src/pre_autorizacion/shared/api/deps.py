@@ -27,6 +27,7 @@ from pre_autorizacion.config.di import (
     get_jwt_service,
     get_llm_provider,
     get_policy_repository,
+    get_procedure_repository,
     get_user_repository,
     get_vision_extractor,
 )
@@ -41,6 +42,7 @@ from pre_autorizacion.features.authorization_cases.domain.ports.case_repository 
 from pre_autorizacion.features.policies.domain.ports.coverage_repository import CoverageRepository
 from pre_autorizacion.features.policies.domain.ports.insurer_repository import InsurerRepository
 from pre_autorizacion.features.policies.domain.ports.policy_repository import PolicyRepository
+from pre_autorizacion.features.procedures.domain.ports import ProcedureRepository
 from pre_autorizacion.shared.domain.errors import AuthError, ForbiddenError
 from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
 from pre_autorizacion.shared.storage.ports.file_storage import FileStorage
@@ -56,16 +58,57 @@ def get_settings_dep() -> Settings:
     return get_settings()
 
 
+def _get_jwt_service() -> JwtService:
+    return get_jwt_service()
+
+
+def _get_user_repository() -> UserRepository:
+    return get_user_repository()
+
+
+def _get_case_repository() -> CaseRepository:
+    return get_case_repository()
+
+
+def _get_policy_repository() -> PolicyRepository:
+    return get_policy_repository()
+
+
+def _get_procedure_repository() -> ProcedureRepository:
+    return get_procedure_repository()
+
+
+def _get_coverage_repository() -> CoverageRepository:
+    return get_coverage_repository()
+
+
+def _get_insurer_repository() -> InsurerRepository:
+    return get_insurer_repository()
+
+
+def _get_file_storage() -> FileStorage:
+    return get_file_storage()
+
+
+def _get_llm_provider() -> LLMProvider:
+    return get_llm_provider()
+
+
+def _get_vision_extractor() -> VisionExtractor:
+    return get_vision_extractor()
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
-JwtServiceDep = Annotated[JwtService, Depends(get_jwt_service)]
-UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
-CaseRepositoryDep = Annotated[CaseRepository, Depends(get_case_repository)]
-PolicyRepositoryDep = Annotated[PolicyRepository, Depends(get_policy_repository)]
-CoverageRepositoryDep = Annotated[CoverageRepository, Depends(get_coverage_repository)]
-InsurerRepositoryDep = Annotated[InsurerRepository, Depends(get_insurer_repository)]
-FileStorageDep = Annotated[FileStorage, Depends(get_file_storage)]
-LLMProviderDep = Annotated[LLMProvider, Depends(get_llm_provider)]
-VisionExtractorDep = Annotated[VisionExtractor, Depends(get_vision_extractor)]
+JwtServiceDep = Annotated[JwtService, Depends(_get_jwt_service)]
+UserRepositoryDep = Annotated[UserRepository, Depends(_get_user_repository)]
+CaseRepositoryDep = Annotated[CaseRepository, Depends(_get_case_repository)]
+PolicyRepositoryDep = Annotated[PolicyRepository, Depends(_get_policy_repository)]
+ProcedureRepositoryDep = Annotated[ProcedureRepository, Depends(_get_procedure_repository)]
+CoverageRepositoryDep = Annotated[CoverageRepository, Depends(_get_coverage_repository)]
+InsurerRepositoryDep = Annotated[InsurerRepository, Depends(_get_insurer_repository)]
+FileStorageDep = Annotated[FileStorage, Depends(_get_file_storage)]
+LLMProviderDep = Annotated[LLMProvider, Depends(_get_llm_provider)]
+VisionExtractorDep = Annotated[VisionExtractor, Depends(_get_vision_extractor)]
 
 
 async def get_current_user(
@@ -122,6 +165,7 @@ __all__ = [
     "JwtServiceDep",
     "LLMProviderDep",
     "PolicyRepositoryDep",
+    "ProcedureRepositoryDep",
     "SettingsDep",
     "UserRepositoryDep",
     "VisionExtractorDep",

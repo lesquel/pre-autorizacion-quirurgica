@@ -1,0 +1,2131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pre-Autorización Quirúrgica",
+    "description": "API del agente de pre-autorización quirúrgica en tiempo real. Recibe informes médicos + pólizas, valida cobertura/carencia/docs, y emite pre-aprobación, solicitud de docs faltantes o escalamiento al auditor médico humano. NUNCA auto-rechaza por diseño.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "description": "Liveness probe: responde 200 si el proceso está vivo.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Ready",
+        "description": "Readiness probe — best-effort check de adapters críticos.",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Ready Ready Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Email + password → access + refresh tokens.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh token → nuevo access token.",
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Usuario actual a partir del access token.",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout — en MVP no invalida tokens (stateless).",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cases": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Submit a new authorization case",
+        "description": "Crea un caso de autorización y dispara el flow de decisión.\n\nEn MVP el flow MOCK (rule engine determinístico) corre síncrono y\ndevuelve el caso decidido. En producción (B3) se devolvería 202 con\n`status=PENDIENTE` y la decisión llegaría por SSE.",
+        "operationId": "submit_case_api_v1_cases_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseSubmitIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "List authorization cases",
+        "description": "Lista paginada de casos visibles para el rol del usuario.\n\nEl rol se extrae del JWT (no del query string) para evitar escalada de\nprivilegios — un hospital nunca puede pedir vista de auditor.",
+        "operationId": "list_cases_api_v1_cases_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CaseStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtro por status del caso.",
+              "title": "Status"
+            },
+            "description": "Filtro por status del caso."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseOut"
+                  },
+                  "title": "Response List Cases Api V1 Cases Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/upload": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Submit a new authorization case with a PDF report (multipart)",
+        "description": "PDF upload variant of `POST /api/v1/cases`. Stores the file via FileStorage.",
+        "operationId": "submit_case_upload_api_v1_cases_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_case_upload_api_v1_cases_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cases/{case_id}": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Get a case by id",
+        "description": "Detalle de un caso. 404 si no existe.",
+        "operationId": "get_case_api_v1_cases__case_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/trace": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Get the agent trace for a case",
+        "description": "Traza completa del agente para el caso. 404 si no existe.",
+        "operationId": "get_case_trace_api_v1_cases__case_id__trace_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseTraceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/resolve": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Resolve an escalated case (auditor only)",
+        "description": "El auditor cierra un caso escalado.\n\nSolo accesible para `Role.AUDITOR`. La decisión queda registrada con\n`decided_by=AUDITOR`, `confidence=1.0`, `outcome=DECIDED`.",
+        "operationId": "resolve_case_api_v1_cases__case_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveCaseIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/files/{filename}": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Download a file attached to a case (auth + RBAC)",
+        "description": "Serves a stored PDF after RBAC + path-traversal checks.",
+        "operationId": "download_case_file_api_v1_cases__case_id__files__filename__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/policies": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "List policies",
+        "description": "Listado completo del catálogo de pólizas (read-only en MVP).",
+        "operationId": "list_policies_api_v1_policies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Policies Api V1 Policies Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Create a policy (insurer-only)",
+        "operationId": "create_policy_api_v1_policies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/policies/{number}": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Get a policy by number",
+        "description": "Detalle de una póliza por su número. 404 si no existe.",
+        "operationId": "get_policy_api_v1_policies__number__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Update a policy by number (insurer-only)",
+        "operationId": "update_policy_api_v1_policies__number__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Delete a policy by number (insurer-only)",
+        "operationId": "delete_policy_api_v1_policies__number__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/policies/{number}/coverages": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "List coverages for a specific policy",
+        "description": "Listado de coberturas de la póliza `number`.",
+        "operationId": "list_coverages_for_policy_api_v1_policies__number__coverages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CoverageOut"
+                  },
+                  "title": "Response List Coverages For Policy Api V1 Policies  Number  Coverages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Replace all coverages for a policy (insurer-only)",
+        "operationId": "replace_coverages_api_v1_policies__number__coverages_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CoverageIn"
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CoverageOut"
+                  },
+                  "title": "Response Replace Coverages Api V1 Policies  Number  Coverages Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/coverages": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "List coverages",
+        "description": "Listado de coberturas. Si `policyNumber` viene, filtra por esa póliza.",
+        "operationId": "list_coverages_api_v1_coverages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "policyNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtro opcional por número de póliza.",
+              "title": "Policynumber"
+            },
+            "description": "Filtro opcional por número de póliza."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CoverageOut"
+                  },
+                  "title": "Response List Coverages Api V1 Coverages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/insurers": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "List insurers",
+        "description": "Listado del catálogo de aseguradoras.",
+        "operationId": "list_insurers_api_v1_insurers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InsurerOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Insurers Api V1 Insurers Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/metrics": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Get dashboard KPIs (insurer-only)",
+        "description": "KPIs agregados para la vista de aseguradora.\n\nRestringido a `Role.INSURER` — el hospital no necesita estos KPIs y el\nauditor tiene su propia bandeja de trabajo.",
+        "operationId": "get_dashboard_metrics_api_v1_dashboard_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardMetricsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/procedures": {
+      "get": {
+        "tags": [
+          "procedures"
+        ],
+        "summary": "List or search procedures",
+        "operationId": "list_procedures_api_v1_procedures_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Substring filter by code or name.",
+              "title": "Q"
+            },
+            "description": "Substring filter by code or name."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProcedureOut"
+                  },
+                  "title": "Response List Procedures Api V1 Procedures Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_submit_case_upload_api_v1_cases_upload_post": {
+        "properties": {
+          "policy_number": {
+            "type": "string",
+            "title": "Policy Number"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "procedure_solicited_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Solicited Hint"
+          },
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "attending_doctor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attending Doctor"
+          },
+          "scenario_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy_number",
+          "patient_id",
+          "file"
+        ],
+        "title": "Body_submit_case_upload_api_v1_cases_upload_post"
+      },
+      "CaseLinks": {
+        "properties": {
+          "self": {
+            "type": "string",
+            "title": "Self"
+          },
+          "trace": {
+            "type": "string",
+            "title": "Trace"
+          },
+          "resolve": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolve"
+          },
+          "events": {
+            "type": "string",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "self",
+          "trace",
+          "events"
+        ],
+        "title": "CaseLinks",
+        "description": "HATEOAS-lite — paths relativos para el cliente."
+      },
+      "CaseOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStatus"
+          },
+          "reportId": {
+            "type": "string",
+            "title": "Reportid"
+          },
+          "policyNumber": {
+            "type": "string",
+            "title": "Policynumber"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "_links": {
+            "$ref": "#/components/schemas/CaseLinks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "reportId",
+          "policyNumber",
+          "createdAt",
+          "_links"
+        ],
+        "title": "CaseOut",
+        "description": "Caso de autorización — respuesta canónica del API."
+      },
+      "CaseStatus": {
+        "type": "string",
+        "enum": [
+          "PENDIENTE",
+          "APROBADO_AUTO",
+          "DOCS_PEDIDOS",
+          "ESCALADO",
+          "DECIDIDO"
+        ],
+        "title": "CaseStatus",
+        "description": "CaseStatus — estado del workflow del caso (dashboard)."
+      },
+      "CaseSubmitIn": {
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/MedicalReportIn"
+          },
+          "policyNumber": {
+            "type": "string",
+            "title": "Policynumber",
+            "description": "Número de la póliza del paciente."
+          },
+          "scenarioKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenariokey",
+            "description": "Override opcional para forzar un escenario en demos."
+          }
+        },
+        "type": "object",
+        "required": [
+          "report",
+          "policyNumber"
+        ],
+        "title": "CaseSubmitIn",
+        "description": "Body de `POST /api/v1/cases` — pedir autorización."
+      },
+      "CaseTraceOut": {
+        "properties": {
+          "trace": {
+            "items": {
+              "$ref": "#/components/schemas/TraceStepOut"
+            },
+            "type": "array",
+            "title": "Trace"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trace"
+        ],
+        "title": "CaseTraceOut",
+        "description": "Wrapper para `GET /api/v1/cases/{id}/trace`."
+      },
+      "CoverageIn": {
+        "properties": {
+          "policyNumber": {
+            "type": "string",
+            "title": "Policynumber"
+          },
+          "procedureCode": {
+            "type": "string",
+            "title": "Procedurecode"
+          },
+          "covered": {
+            "type": "boolean",
+            "title": "Covered"
+          },
+          "waitingDays": {
+            "type": "integer",
+            "title": "Waitingdays"
+          },
+          "copay": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Copay"
+          },
+          "requiredDocs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requireddocs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policyNumber",
+          "procedureCode",
+          "covered",
+          "waitingDays",
+          "copay"
+        ],
+        "title": "CoverageIn",
+        "description": "Item de PUT /policies/{number}/coverages."
+      },
+      "CoverageOut": {
+        "properties": {
+          "policyNumber": {
+            "type": "string",
+            "title": "Policynumber"
+          },
+          "procedureCode": {
+            "type": "string",
+            "title": "Procedurecode"
+          },
+          "covered": {
+            "type": "boolean",
+            "title": "Covered"
+          },
+          "waitingDays": {
+            "type": "integer",
+            "title": "Waitingdays"
+          },
+          "copay": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Copay"
+          },
+          "requiredDocs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requireddocs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policyNumber",
+          "procedureCode",
+          "covered",
+          "waitingDays",
+          "copay"
+        ],
+        "title": "CoverageOut",
+        "description": "Cobertura — DTO de salida.\n\n`copay` se serializa como `Decimal` → string en JSON (Pydantic v2 default\npara `Decimal`); el frontend ya lo parsea como string monetaria."
+      },
+      "DashboardMetricsOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "autoApproved": {
+            "type": "integer",
+            "title": "Autoapproved"
+          },
+          "docsRequested": {
+            "type": "integer",
+            "title": "Docsrequested"
+          },
+          "escalated": {
+            "type": "integer",
+            "title": "Escalated"
+          },
+          "decided": {
+            "type": "integer",
+            "title": "Decided"
+          },
+          "autoApprovedPct": {
+            "type": "number",
+            "title": "Autoapprovedpct"
+          },
+          "avgConfidence": {
+            "type": "number",
+            "title": "Avgconfidence"
+          },
+          "avgDurationMs": {
+            "type": "number",
+            "title": "Avgdurationms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "autoApproved",
+          "docsRequested",
+          "escalated",
+          "decided",
+          "autoApprovedPct",
+          "avgConfidence",
+          "avgDurationMs"
+        ],
+        "title": "DashboardMetricsOut",
+        "description": "KPIs agregados — DTO de salida para `GET /api/v1/dashboard/metrics`."
+      },
+      "DecidedBy": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "auditor"
+        ],
+        "title": "DecidedBy",
+        "description": "DecidedBy — quién emitió la decisión."
+      },
+      "DecisionOut": {
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/Outcome"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "decidedBy": {
+            "$ref": "#/components/schemas/DecidedBy"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceOut"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "missingDocs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missingdocs"
+          },
+          "escalationReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelUsed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome",
+          "rationale",
+          "confidence",
+          "decidedBy"
+        ],
+        "title": "DecisionOut",
+        "description": "Decisión emitida por el agente o el auditor."
+      },
+      "EscalationReason": {
+        "type": "string",
+        "enum": [
+          "WAITING_PERIOD_NOT_MET",
+          "LOW_CONFIDENCE_PROCEDURE_MATCH",
+          "PDF_EXTRACTION_FAILURE",
+          "PROCEDURE_NOT_COVERED",
+          "POLICY_INACTIVE",
+          "PROCEDURE_NOT_MATCHED",
+          "EXTRACTION_FAILED",
+          "LOW_CONFIDENCE",
+          "UNEXPECTED_ERROR"
+        ],
+        "title": "EscalationReason",
+        "description": "EscalationReason — motivos de escalamiento a auditor humano."
+      },
+      "EvidenceOut": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/EvidenceSource"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "field",
+          "quote"
+        ],
+        "title": "EvidenceOut",
+        "description": "Cita auditable que respalda la decisión."
+      },
+      "EvidenceSource": {
+        "type": "string",
+        "enum": [
+          "report",
+          "policy"
+        ],
+        "title": "EvidenceSource",
+        "description": "EvidenceSource — origen de la cita."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InsurerOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "InsurerOut",
+        "description": "Aseguradora — DTO de salida."
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 3,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "Body de `POST /auth/login`."
+      },
+      "LoginResponse": {
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "title": "Accesstoken"
+          },
+          "refreshToken": {
+            "type": "string",
+            "title": "Refreshtoken"
+          },
+          "tokenType": {
+            "type": "string",
+            "title": "Tokentype",
+            "default": "bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "user"
+        ],
+        "title": "LoginResponse",
+        "description": "Respuesta de `POST /auth/login`."
+      },
+      "MedicalReportIn": {
+        "properties": {
+          "patientId": {
+            "type": "string",
+            "title": "Patientid",
+            "description": "ID del paciente (Pacientes:id)."
+          },
+          "format": {
+            "$ref": "#/components/schemas/ReportFormat",
+            "default": "text"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Contenido del informe (texto o ruta del PDF)."
+          },
+          "procedureSolicitedHint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proceduresolicitedhint",
+            "description": "Procedimiento sugerido por el hospital (código o descripción)."
+          },
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "attendingDoctor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendingdoctor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patientId",
+          "content"
+        ],
+        "title": "MedicalReportIn",
+        "description": "Informe médico que el hospital adjunta al crear un caso."
+      },
+      "Outcome": {
+        "type": "string",
+        "enum": [
+          "APPROVED_AUTO",
+          "DOCS_REQUESTED",
+          "ESCALATED",
+          "DECIDED",
+          "PENDING"
+        ],
+        "title": "Outcome",
+        "description": "Outcome — resultado emitido por el agente o el auditor."
+      },
+      "PolicyIn": {
+        "properties": {
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "patientId": {
+            "type": "string",
+            "title": "Patientid"
+          },
+          "plan": {
+            "type": "string",
+            "title": "Plan"
+          },
+          "insurerId": {
+            "type": "string",
+            "title": "Insurerid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "patientId",
+          "plan",
+          "insurerId",
+          "startDate",
+          "endDate",
+          "status"
+        ],
+        "title": "PolicyIn",
+        "description": "Body de POST/PUT /policies."
+      },
+      "PolicyOut": {
+        "properties": {
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "patientId": {
+            "type": "string",
+            "title": "Patientid"
+          },
+          "plan": {
+            "type": "string",
+            "title": "Plan"
+          },
+          "insurerId": {
+            "type": "string",
+            "title": "Insurerid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "patientId",
+          "plan",
+          "insurerId",
+          "startDate",
+          "endDate",
+          "status"
+        ],
+        "title": "PolicyOut",
+        "description": "Póliza — DTO de salida."
+      },
+      "PolicyStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE",
+          "SUSPENDED"
+        ],
+        "title": "PolicyStatus",
+        "description": "PolicyStatus — estado canónico de una póliza."
+      },
+      "ProcedureOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "waitingDaysTypical": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waitingdaystypical"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ProcedureOut"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Refreshtoken"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refreshToken"
+        ],
+        "title": "RefreshRequest",
+        "description": "Body de `POST /auth/refresh`."
+      },
+      "RefreshResponse": {
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "title": "Accesstoken"
+          },
+          "tokenType": {
+            "type": "string",
+            "title": "Tokentype",
+            "default": "bearer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessToken"
+        ],
+        "title": "RefreshResponse",
+        "description": "Respuesta de `POST /auth/refresh`."
+      },
+      "ReportFormat": {
+        "type": "string",
+        "enum": [
+          "text",
+          "pdf"
+        ],
+        "title": "ReportFormat",
+        "description": "ReportFormat — formato del informe médico."
+      },
+      "ResolveCaseIn": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Outcome"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Mensaje humano final que verá el hospital."
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning",
+            "description": "Razonamiento del auditor (rationale)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome",
+          "message",
+          "reasoning"
+        ],
+        "title": "ResolveCaseIn",
+        "description": "Body de `POST /api/v1/cases/{id}/resolve` — auditor cierra el caso."
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "hospital",
+          "insurer",
+          "auditor"
+        ],
+        "title": "Role",
+        "description": "Rol del usuario (PRD §3 — 3 roles del MVP)."
+      },
+      "TraceStepOut": {
+        "properties": {
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TraceStepState"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durationms"
+          },
+          "modelUsed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelused"
+          },
+          "tokensIn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokensin"
+          },
+          "tokensOut": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokensout"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node",
+          "timestamp",
+          "state"
+        ],
+        "title": "TraceStepOut",
+        "description": "Paso individual de la traza del agente."
+      },
+      "TraceStepState": {
+        "type": "string",
+        "enum": [
+          "running",
+          "done",
+          "error"
+        ],
+        "title": "TraceStepState",
+        "description": "TraceStepState — estado terminal o en progreso de un paso de traza."
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role"
+        ],
+        "title": "UserOut",
+        "description": "Representación pública de un usuario (sin hash)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

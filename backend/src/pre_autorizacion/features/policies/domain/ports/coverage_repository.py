@@ -26,3 +26,11 @@ class CoverageRepository(ABC):
     @abstractmethod
     async def list_for_policy(self, policy_number: str) -> tuple[Coverage, ...]:
         """Lista las coberturas asociadas a la póliza `policy_number`."""
+
+    @abstractmethod
+    async def replace_for_policy(
+        self,
+        policy_number: str,
+        coverages: tuple[Coverage, ...],
+    ) -> tuple[Coverage, ...]:
+        """Atomically replace the full coverage set for `policy_number`."""

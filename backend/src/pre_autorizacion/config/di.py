@@ -40,6 +40,7 @@ from pre_autorizacion.features.authorization_cases.domain.ports.response_generat
     ResponseGenerator,
 )
 from pre_autorizacion.features.policies.domain.ports.coverage_repository import CoverageRepository
+from pre_autorizacion.features.procedures.domain.ports import ProcedureRepository
 from pre_autorizacion.features.policies.domain.ports.insurer_repository import InsurerRepository
 from pre_autorizacion.features.policies.domain.ports.policy_repository import PolicyRepository
 from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
@@ -233,6 +234,16 @@ def get_case_repository(settings: Settings | None = None) -> CaseRepository:
 
 
 @lru_cache(maxsize=1)
+def get_procedure_repository(settings: Settings | None = None) -> ProcedureRepository:
+    """Procedure catalog — in-memory in v1 (Notion adapter is post-v1)."""
+    _ = settings or get_settings()
+    from pre_autorizacion.features.procedures.infrastructure.repos import (  # noqa: PLC0415
+        InMemoryProcedureRepository,
+    )
+    return InMemoryProcedureRepository()
+
+
+@lru_cache(maxsize=1)
 def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
     """LLM provider — DeepSeek (default) cuando hay API key, sino `_NullLLMProvider`.
 
@@ -377,6 +388,7 @@ def reset_container() -> None:
     get_vision_extractor.cache_clear()
     get_text_extractor.cache_clear()
     get_pdf_extractor.cache_clear()
+    get_procedure_repository.cache_clear()
     get_decision_maker.cache_clear()
     get_response_generator.cache_clear()
     get_agent_orchestrator.cache_clear()
@@ -393,6 +405,7 @@ __all__ = [
     "get_llm_provider",
     "get_pdf_extractor",
     "get_policy_repository",
+    "get_procedure_repository",
     "get_response_generator",
     "get_text_extractor",
     "get_user_repository",

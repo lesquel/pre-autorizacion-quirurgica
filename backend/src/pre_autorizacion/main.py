@@ -58,23 +58,16 @@ def _register_feature_routers(app: FastAPI) -> None:
             note="policies router not yet wired.",
         )
 
-    # Procedures vive bajo el feature `authorization_cases` o un feature propio
-    # según decida B2 E2 — probamos ambos paths candidatos.
-    for module_path in (
-        "pre_autorizacion.features.procedures.api.router",
-        "pre_autorizacion.features.authorization_cases.api.procedures_router",
-    ):
-        try:
-            module = __import__(module_path, fromlist=["router"])
-            procedures_router = module.router
-            app.include_router(procedures_router)
-            break
-        except ImportError:
-            continue
-    else:
+    try:
+        from pre_autorizacion.features.procedures.api.routers import (  # noqa: PLC0415
+            router as procedures_router,
+        )
+        app.include_router(procedures_router)
+    except ImportError as exc:
         _logger.warning(
             "router.procedures.unavailable",
-            note="procedures router not yet wired — endpoints disabled until B2 E2 lands.",
+            reason=str(exc),
+            note="procedures router not yet wired.",
         )
 
 

@@ -56,7 +56,7 @@ import type { Procedure } from '../../../../../../shared/domain/entities';
                 <td
                   class="px-4 py-3 font-mono text-[11px] text-ink-3 dark:text-ink-5 tabular-nums"
                 >
-                  {{ formatWaiting(p.waitingDaysTypical) }}
+                  {{ formatWaiting(p.waitingDaysTypical ?? 0) }}
                 </td>
               </tr>
             }

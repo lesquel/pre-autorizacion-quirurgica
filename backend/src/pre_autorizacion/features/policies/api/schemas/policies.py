@@ -123,13 +123,69 @@ def metrics_to_out(metrics: DashboardMetrics) -> DashboardMetricsOut:
     )
 
 
+# ── Inputs ────────────────────────────────────────────────────────────────
+
+
+class PolicyIn(CamelModel):
+    """Body de POST/PUT /policies."""
+
+    number: str
+    patient_id: str
+    plan: str
+    insurer_id: str
+    start_date: date
+    end_date: date
+    status: PolicyStatus
+
+
+class CoverageIn(CamelModel):
+    """Item de PUT /policies/{number}/coverages."""
+
+    policy_number: str
+    procedure_code: str
+    covered: bool
+    waiting_days: int
+    copay: Decimal
+    required_docs: list[str] = Field(default_factory=list)
+
+
+# ── Mappers (DTO → domain) ────────────────────────────────────────────────
+
+
+def policy_in_to_domain(body: PolicyIn) -> Policy:
+    return Policy(
+        number=body.number,
+        patient_id=body.patient_id,
+        plan=body.plan,
+        insurer_id=body.insurer_id,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        status=body.status,
+    )
+
+
+def coverage_in_to_domain(body: CoverageIn) -> Coverage:
+    return Coverage(
+        policy_number=body.policy_number,
+        procedure_code=body.procedure_code,
+        covered=body.covered,
+        waiting_days=body.waiting_days,
+        copay=body.copay,
+        required_docs=tuple(body.required_docs),
+    )
+
+
 __all__ = [
+    "CoverageIn",
     "CoverageOut",
     "DashboardMetricsOut",
     "InsurerOut",
+    "PolicyIn",
     "PolicyOut",
+    "coverage_in_to_domain",
     "coverage_to_out",
     "insurer_to_out",
     "metrics_to_out",
+    "policy_in_to_domain",
     "policy_to_out",
 ]

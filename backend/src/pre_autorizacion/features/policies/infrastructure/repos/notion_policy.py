@@ -36,3 +36,18 @@ class NotionPolicyRepository(PolicyRepository):
         if not pages:
             return None
         return notion_to_policy(pages[0])
+
+    async def create(self, policy: Policy) -> Policy:  # type: ignore[override]
+        raise NotImplementedError(
+            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
+        )
+
+    async def update(self, policy: Policy) -> Policy:  # type: ignore[override]
+        raise NotImplementedError(
+            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
+        )
+
+    async def delete(self, number: str) -> None:  # type: ignore[override]
+        raise NotImplementedError(
+            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
+        )

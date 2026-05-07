@@ -20,3 +20,14 @@ class InMemoryCoverageRepository(CoverageRepository):
 
     async def list_for_policy(self, policy_number: str) -> tuple[Coverage, ...]:
         return tuple(c for c in self._coverages if c.policy_number == policy_number)
+
+    async def replace_for_policy(
+        self,
+        policy_number: str,
+        coverages: tuple[Coverage, ...],
+    ) -> tuple[Coverage, ...]:
+        # Drop existing entries for this policy, then append the new set.
+        kept = tuple(c for c in self._coverages if c.policy_number != policy_number)
+        new = tuple(c for c in coverages if c.policy_number == policy_number)
+        self._coverages = kept + new
+        return new

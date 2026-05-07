@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 
 import { SEED } from '../../../../shared/fixtures/seed';
 import type { Coverage } from '../../domain/entities';
@@ -7,16 +7,29 @@ import { CoverageRepository } from '../../domain/ports/coverage-repository.port'
 /**
  * InMemoryCoverageRepository — adapter del `CoverageRepository` contra el SEED.
  *
- * `listForPolicy` resuelve por filtro lineal sobre el SEED (n pequeño en MVP).
- * Cuando se necesite scale, el adapter HTTP puede indexar por `policyNumber`.
+ * Almacena las coberturas en un signal mutable seeded del SEED. Sigue siendo
+ * útil para tests y como fallback. En runtime el composition root liga
+ * `HttpCoverageRepository` al token `CoverageRepository`.
  */
 @Injectable({ providedIn: 'root' })
 export class InMemoryCoverageRepository extends CoverageRepository {
+  private readonly _coverages = signal<readonly Coverage[]>([...SEED.coverages]);
+
   override list(): readonly Coverage[] {
-    return SEED.coverages;
+    return this._coverages();
   }
 
   override listForPolicy(policyNumber: string): readonly Coverage[] {
-    return SEED.coverages.filter((c) => c.policyNumber === policyNumber);
+    return this._coverages().filter((c) => c.policyNumber === policyNumber);
+  }
+
+  override replaceForPolicy(
+    policyNumber: string,
+    coverages: readonly Coverage[],
+  ): Promise<readonly Coverage[]> {
+    const kept = this._coverages().filter((c) => c.policyNumber !== policyNumber);
+    const next = coverages.filter((c) => c.policyNumber === policyNumber);
+    this._coverages.set([...kept, ...next]);
+    return Promise.resolve(next);
   }
 }
