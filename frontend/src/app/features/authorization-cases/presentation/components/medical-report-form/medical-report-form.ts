@@ -16,6 +16,8 @@ export interface MedicalReportFormPrefill {
   readonly procedureSolicitedHint?: string;
   readonly diagnosis?: string;
   readonly attendingDoctor?: string;
+  /** PDF del informe ya elegido (extracción automática). `null` limpia el archivo local. */
+  readonly medicalPdfFile?: File | null;
 }
 
 export interface MedicalReportFormSubmit {
@@ -252,11 +254,20 @@ export class MedicalReportForm {
       }
       this.patientId.set(p.patientId ?? '');
       this.policyNumber.set(p.policyNumber ?? '');
-      this.format.set(p.format ?? 'text');
+      const fmt = p.format ?? 'text';
+      this.format.set(fmt);
       this.content.set(p.content ?? '');
       this.procedureSolicitedHint.set(p.procedureSolicitedHint ?? '');
       this.diagnosis.set(p.diagnosis ?? '');
       this.attendingDoctor.set(p.attendingDoctor ?? '');
+      if (p.medicalPdfFile === null) {
+        this.file.set(null);
+        this.fileError.set(null);
+      } else if (p.medicalPdfFile instanceof File) {
+        this.file.set(p.medicalPdfFile);
+        this.fileError.set(null);
+        this.format.set('pdf');
+      }
     });
   }
 

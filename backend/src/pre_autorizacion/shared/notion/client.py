@@ -120,11 +120,17 @@ class NotionClient:
         database_id: str,
         properties: dict[str, Any],
     ) -> dict[str, Any]:
+        """Crea una fila bajo un data source (id de colección / `NOTION_DB_*`).
+
+        Notion API `2025-09-03` espera `parent.type=data_source_id`, no
+        `database_id` plano, cuando el identificador configurado es el de la
+        fuente de datos.
+        """
         try:
             return cast(
                 "dict[str, Any]",
                 await self._client.pages.create(
-                    parent={"database_id": database_id},
+                    parent={"type": "data_source_id", "data_source_id": database_id},
                     properties=properties,
                 ),
             )

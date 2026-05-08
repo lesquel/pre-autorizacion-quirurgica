@@ -1,16 +1,7 @@
-import {
-  computed,
-  DestroyRef,
-  inject,
-  Injectable,
-  type Signal,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { computed, inject, Injectable, type Signal, signal } from '@angular/core';
 
 import type { Role } from '../../../../core/types/role';
 import type { AuthorizationCase } from '../../domain/entities/authorization-case';
-import type { MedicalReport } from '../../domain/entities/medical-report';
 import { CaseRepository } from '../../domain/ports/case-repository.port';
 import type { AgentDecision } from '../../domain/value-objects/agent-decision';
 import type { TraceStep } from '../../domain/value-objects/trace-step';
@@ -31,7 +22,9 @@ import {
 /**
  * CurrentRun — estado en vivo de la corrida del agente para el caso recién enviado.
  *
- * - `caseId`   : id del caso creado.
+ * - `streamKey`: id estable de esta corrida (placeholder `PENDING-…` del stream);
+ *                no cambia cuando el primer paso “sube” el id real a `caseId`.
+ * - `caseId`   : id del caso para la UI (placeholder hasta el 1er paso, luego `CASE-…`).
  * - `trace`    : pasos terminales acumulados (no incluye los `running`).
  * - `decision` : presente cuando llegó `done`.
  * - `status`   : 'running' mientras llegan steps, 'done' al recibir `done`,
@@ -39,6 +32,8 @@ import {
  * - `error`    : mensaje del fallo cuando status === 'error'.
  */
 export interface CurrentRun {
+  /** Correlaciona eventos del observable con esta corrida (no mutar). */
+  readonly streamKey: string;
   readonly caseId: string;
   readonly trace: readonly TraceStep[];
   readonly decision?: AgentDecision;
@@ -55,10 +50,10 @@ export interface CurrentRun {
  * - `currentRun`   : corrida en vivo del último submit (o null).
  * - `selectedCase` : caso seleccionado para detalle (o undefined).
  *
- * Los Observables del agente se suscriben acá con `takeUntilDestroyed(destroyRef)`
- * — la UI consume signals, jamás Observables. Esto desacopla la presentación
- * del transporte (cuando llegue el backend real con WebSockets/SSE, sólo
- * cambia el adapter).
+ * Los eventos del agente se suscriben sin `takeUntilDestroyed`: si navegamos
+ * fuera del Submit enseguida, el DestroyRef del facade podría estar ligado al
+ * componente que lo instanció y cancelaría el stream antes de `done`/`error`.
+ * El `HttpAgentAdapter` completa el Observable al terminar (sin fugas).
  */
 @Injectable({ providedIn: 'root' })
 export class AuthorizationCasesFacade {
@@ -67,7 +62,6 @@ export class AuthorizationCasesFacade {
   private readonly resolveCaseUC = inject(ResolveCaseUseCase);
   private readonly listCasesUC = inject(ListCasesUseCase);
   private readonly getCaseByIdUC = inject(GetCaseByIdUseCase);
-  private readonly destroyRef = inject(DestroyRef);
 
   readonly cases = this.repository.cases;
 
@@ -91,58 +85,57 @@ export class AuthorizationCasesFacade {
    * NO devolvemos Observable a propósito (presentación consume signals).
    */
   submitCase(input: SubmitCaseInput): void {
-    const { caseId, events$ } = this.submitCaseUC.execute(input);
+    const { caseId: streamKey, events$ } = this.submitCaseUC.execute(input);
 
     this._currentRun.set({
-      caseId,
+      streamKey,
+      caseId: streamKey,
       trace: [],
       status: 'running',
     });
 
-    events$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((event) => {
-        const current = this._currentRun();
-        if (!current || current.caseId !== caseId) {
-          // Otro submit ya tomó el lugar — ignoramos eventos viejos.
+    events$.subscribe((event) => {
+      const current = this._currentRun();
+      if (current?.streamKey !== streamKey) {
+        // Otro submit reemplazó la corrida — ignoramos eventos viejos.
+        return;
+      }
+
+      if (event.kind === 'step') {
+        if (event.step.state === 'running') {
+          // No persistimos steps `running` — el repo ya tiene la traza
+          // terminal acumulada vía el use case.
           return;
         }
+        // The HTTP adapter encodes the real caseId via a sentinel in the
+        // first step's `detail`. If present, hoist it into the run.
+        const idFromStep = readCaseIdSentinel(event.step.detail);
+        this._currentRun.set({
+          ...current,
+          caseId: idFromStep ?? current.caseId,
+          trace: [...current.trace, event.step],
+        });
+        return;
+      }
 
-        if (event.kind === 'step') {
-          if (event.step.state === 'running') {
-            // No persistimos steps `running` — el repo ya tiene la traza
-            // terminal acumulada vía el use case.
-            return;
-          }
-          // The HTTP adapter encodes the real caseId via a sentinel in the
-          // first step's `detail`. If present, hoist it into the run.
-          const idFromStep = readCaseIdSentinel(event.step.detail);
-          this._currentRun.set({
-            ...current,
-            caseId: idFromStep ?? current.caseId,
-            trace: [...current.trace, event.step],
-          });
-          return;
-        }
-
-        if (event.kind === 'done') {
-          this._currentRun.set({
-            ...current,
-            trace: event.trace,
-            decision: event.decision,
-            status: 'done',
-          });
-          return;
-        }
-
-        // event.kind === 'error'
+      if (event.kind === 'done') {
         this._currentRun.set({
           ...current,
           trace: event.trace,
-          status: 'error',
-          error: event.error,
+          decision: event.decision,
+          status: 'done',
         });
+        return;
+      }
+
+      // event.kind === 'error'
+      this._currentRun.set({
+        ...current,
+        trace: event.trace,
+        status: 'error',
+        error: event.error,
       });
+    });
   }
 
   clearRun(): void {

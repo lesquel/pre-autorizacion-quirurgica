@@ -35,16 +35,18 @@ export class ThemeService {
   readonly theme = this._theme.asReadonly();
 
   constructor() {
-    effect(() => {
-      const current = this._theme();
-
+    const applyDom = (current: Theme): void => {
       if (typeof document !== 'undefined') {
         document.documentElement.classList.toggle('dark', current === 'dark');
       }
-
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(STORAGE_KEY, current);
       }
+    };
+    applyDom(this._theme());
+
+    effect(() => {
+      applyDom(this._theme());
     });
   }
 
