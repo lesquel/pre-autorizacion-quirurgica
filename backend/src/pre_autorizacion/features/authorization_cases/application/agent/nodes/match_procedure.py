@@ -71,15 +71,33 @@ async def match_procedure_node(state: AgentGraphState) -> dict[str, Any]:
             and _normalize(extracted.extracted_procedure_code)
             == _normalize(coverage.procedure_code)
         ):
-            score = 1.0
-            set_detail(f"exact code match {coverage.procedure_code!r}")
+            # Match exacto de código — pero acotado por la calidad de la
+            # extracción. Si el LLM extrajo el código con confidence=0.30
+            # (PDF malo, ambiguo, escaneo pobre), el match score se cap a
+            # 0.30 aunque los códigos coincidan literalmente. Razón: el
+            # hint del formulario (`procedureSolicitedHint`) y el código
+            # de la cobertura suelen coincidir trivialmente; el match
+            # exacto NO debería disparar APPROVED_AUTO solo por eso si
+            # el informe no sustenta clínicamente la coincidencia. Issue #3.
+            score = min(1.0, extracted.confidence)
+            set_detail(
+                f"exact code match {coverage.procedure_code!r} "
+                f"(capped by extraction.confidence={extracted.confidence:.2f})"
+            )
         else:
-            score = _name_similarity(
+            raw_similarity = _name_similarity(
                 extracted.extracted_procedure_name,
                 coverage.procedure_code,
             )
+            # Mismo principio que el match exacto: la similaridad fuzzy
+            # se multiplica por la confidence de la extracción. Una
+            # extracción de baja confianza no debe inflar el match aunque
+            # los strings parezcan parecidos por casualidad.
+            score = raw_similarity * extracted.confidence
             set_detail(
-                f"fuzzy similarity={score:.2f} vs {coverage.procedure_code!r}"
+                f"fuzzy similarity={raw_similarity:.2f} × "
+                f"extraction.confidence={extracted.confidence:.2f} "
+                f"= {score:.2f} vs {coverage.procedure_code!r}"
             )
 
     procedure_covered = bool(coverage.covered) and score >= _DEFAULT_MATCH_THRESHOLD
