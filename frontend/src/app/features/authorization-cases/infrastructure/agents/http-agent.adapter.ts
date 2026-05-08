@@ -103,7 +103,9 @@ export class HttpAgentAdapter extends AgentOrchestrator {
     const body = {
       report: {
         patientId: request.report.patientId,
-        format: 'TEXT',
+        // Backend ReportFormat StrEnum es lowercase ('text' | 'pdf').
+        // Anteriormente acá había 'TEXT' hardcodeado → 422 validation error.
+        format: 'text',
         content: request.report.content,
         procedureSolicitedHint: request.report.procedureSolicitedHint,
         diagnosis: request.report.diagnosis,
