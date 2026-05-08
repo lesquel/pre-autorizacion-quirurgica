@@ -1,4 +1,10 @@
-"""Integration test fixtures — FastAPI TestClient + reset DI between tests."""
+"""Integration test fixtures — FastAPI TestClient + reset DI between tests.
+
+Forzamos InMemory adapters (sin Notion ni LLM real) limpiando las env vars
+relevantes vía `monkeypatch`. Esto aísla los tests del `.env` local del dev:
+si el dev tiene `NOTION_TOKEN` o `DEEPSEEK_API_KEY` configuradas para correr
+la app de verdad, los tests igual usan los stubs in-memory determinísticos.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +14,36 @@ import pytest
 from fastapi.testclient import TestClient
 
 from pre_autorizacion.config.di import reset_container
+from pre_autorizacion.config.settings import get_settings
 from pre_autorizacion.main import create_app
+
+_ENV_VARS_TO_CLEAR = (
+    "NOTION_TOKEN",
+    "NOTION_DB_PATIENTS",
+    "NOTION_DB_INSURERS",
+    "NOTION_DB_PROCEDURES",
+    "NOTION_DB_POLICIES",
+    "NOTION_DB_COVERAGES",
+    "NOTION_DB_MEDICAL_REPORTS",
+    "NOTION_DB_AUTHORIZATION_CASES",
+    "DEEPSEEK_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
 
 
 @pytest.fixture(autouse=True)
-def _reset_di() -> Iterator[None]:
+def _reset_di(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    for var in _ENV_VARS_TO_CLEAR:
+        monkeypatch.setenv(var, "")
+    # `get_settings` está lru_cached y `reset_container()` solo limpia
+    # las factories — si no clean acá, Settings queda con valores de
+    # `.env` cargados al primer import.
+    get_settings.cache_clear()
     reset_container()
     yield
+    get_settings.cache_clear()
     reset_container()
 
 
