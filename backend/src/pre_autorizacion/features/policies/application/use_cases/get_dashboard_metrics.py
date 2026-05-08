@@ -5,9 +5,11 @@ Métricas (PRD §3.1.4 — vista Aseguradora):
 - auto_approved / docs_requested / escalated / decided: contadores por status.
 - auto_approved_pct: % de aprobados automáticos sobre total (0.0 si total=0).
 - avg_confidence: promedio de confidence de los casos con `decision != None`.
-- avg_duration_ms: promedio de duración (decided_at - created_at) en milisegundos
-  de los casos terminales (status DECIDIDO/APROBADO_AUTO/DOCS_PEDIDOS), 0 si no
-  hay casos terminales.
+- avg_duration_ms: promedio del tiempo total que tarda el agente en procesar un
+  caso. Se calcula sumando `duration_ms` de TODOS los TraceSteps de cada caso
+  con traza no vacía y promediando entre esos casos. Refleja la latencia pura
+  del agente (extracción + decisión + persistencia), sin incluir la red ni
+  el frontend. 0 si ningún caso tiene traza.
 """
 
 from __future__ import annotations
@@ -18,14 +20,12 @@ from typing import TYPE_CHECKING
 from pre_autorizacion.features.authorization_cases.domain.value_objects import CaseStatus
 
 if TYPE_CHECKING:
+    from pre_autorizacion.features.authorization_cases.domain.entities.authorization_case import (
+        AuthorizationCase,
+    )
     from pre_autorizacion.features.authorization_cases.domain.ports.case_repository import (
         CaseRepository,
     )
-
-
-_TERMINAL_STATUSES: frozenset[CaseStatus] = frozenset(
-    {CaseStatus.APROBADO_AUTO, CaseStatus.DOCS_PEDIDOS, CaseStatus.DECIDIDO}
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +40,11 @@ class DashboardMetrics:
     auto_approved_pct: float
     avg_confidence: float
     avg_duration_ms: float
+
+
+def _case_total_duration_ms(case: AuthorizationCase) -> int:
+    """Suma `duration_ms` de todos los TraceSteps del caso (None → 0)."""
+    return sum(step.duration_ms or 0 for step in case.agent_trace)
 
 
 @dataclass(slots=True)
@@ -60,18 +65,25 @@ class GetDashboardMetricsUseCase:
 
         auto_approved_pct = (auto_approved / total) if total > 0 else 0.0
 
+        # avg_confidence: solo casos con `decision` (no todos los casos), evita
+        # diluir el promedio con casos pendientes sin decisión.
         decisions = [c.decision for c in cases if c.decision is not None]
         avg_confidence = (
             sum(d.confidence for d in decisions) / len(decisions) if decisions else 0.0
         )
 
-        durations_ms = [
-            (c.decided_at - c.created_at).total_seconds() * 1000.0
-            for c in cases
-            if c.status in _TERMINAL_STATUSES and c.decided_at is not None
+        # avg_duration_ms: suma de `duration_ms` de los TraceSteps por caso,
+        # promediada sobre los casos con traza no vacía. Es la duración real
+        # del agente (no el delta `decided_at - created_at`, que en SQLite
+        # puede ser ~0 cuando ambos timestamps se persisten en la misma
+        # transacción).
+        cases_with_trace_durations = [
+            _case_total_duration_ms(c) for c in cases if c.agent_trace
         ]
         avg_duration_ms = (
-            sum(durations_ms) / len(durations_ms) if durations_ms else 0.0
+            sum(cases_with_trace_durations) / len(cases_with_trace_durations)
+            if cases_with_trace_durations
+            else 0.0
         )
 
         return DashboardMetrics(
