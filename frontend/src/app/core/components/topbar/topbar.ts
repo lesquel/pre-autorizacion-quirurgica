@@ -7,6 +7,7 @@ import {
 
 import { Segmented, type SegmentedOption } from '../../../shared/ui/segmented/segmented';
 import { RoleService } from '../../services/role.service';
+import { TourService } from '../../services/tour.service';
 import type { Role } from '../../types/role';
 import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
 
@@ -58,6 +59,16 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
           ></span>
           SSE
         </span>
+        <button
+          type="button"
+          class="inline-grid place-items-center w-7 h-7 border border-line dark:border-ink-3 text-ink-3 dark:text-ink-5 hover:text-ink dark:hover:text-bg hover:border-ink-4 transition-colors font-mono text-[12px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          [disabled]="tourActive()"
+          (click)="onStartTour()"
+          aria-label="Iniciar tour guiado"
+          title="Tour guiado del demo"
+        >
+          ?
+        </button>
         <app-dark-light-toggle />
       </div>
     </header>
@@ -65,6 +76,7 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
 })
 export class Topbar {
   private readonly roleService = inject(RoleService);
+  private readonly tourService = inject(TourService);
 
   protected readonly roleOptions: SegmentedOption[] = [
     { value: 'hospital', label: 'Hospital' },
@@ -73,8 +85,13 @@ export class Topbar {
   ];
 
   protected readonly currentRole = computed<string>(() => this.roleService.role());
+  protected readonly tourActive = this.tourService.active;
 
   protected onRoleChange(value: string): void {
     this.roleService.set(value as Role);
+  }
+
+  protected onStartTour(): void {
+    void this.tourService.start();
   }
 }

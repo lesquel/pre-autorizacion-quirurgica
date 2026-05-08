@@ -4,6 +4,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
 import { RoleService } from './core/services/role.service';
+import { TourService } from './core/services/tour.service';
 import { Role } from './core/types/role';
 import { ShellLayout } from './layouts/shell-layout/shell-layout';
 import { AuthFacade } from './features/auth/application/facades/auth.facade';
@@ -36,11 +37,14 @@ export class App {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly auth = inject(AuthFacade);
+  private readonly tour = inject(TourService);
   private readonly caseRepo = inject(HttpCaseRepository);
   private readonly policyRepo = inject(HttpPolicyRepository);
   private readonly coverageRepo = inject(HttpCoverageRepository);
   private readonly insurerRepo = inject(HttpInsurerRepository);
   private readonly procedureRepo = inject(HttpProcedureRepository);
+  /** Guard para que el auto-tour solo dispare una vez por sesión del componente. */
+  private autoTourFired = false;
 
   constructor() {
     // URL → Role: cuando navegamos, sync el rol activo en el service.
@@ -75,6 +79,22 @@ export class App {
           this.insurerRepo.loadAll(),
           this.procedureRepo.list(),
         ]).catch(() => undefined);
+      }
+    });
+
+    // Auto-start del tour guiado en la PRIMERA visita post-login. localStorage
+    // flag (`preauth.tour.seen`) bloquea las siguientes; el botón `?` del
+    // TopBar permite re-abrirlo cuando el usuario quiera.
+    effect(() => {
+      if (
+        !this.autoTourFired &&
+        this.auth.isAuthenticated() &&
+        !this.tour.hasBeenSeen()
+      ) {
+        this.autoTourFired = true;
+        // Pequeño delay para que el shell-layout termine de renderizar antes
+        // del primer highlight (evita flicker del popover sobre el área vacía).
+        setTimeout(() => void this.tour.start(), 600);
       }
     });
   }
