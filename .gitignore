@@ -18,6 +18,11 @@ desktop.ini
 .vscode/*
 !.vscode/tasks.json
 !.vscode/extensions.json
+
+# Playwright MCP runtime (logs + screenshots ephemeral del browser)
+.playwright-mcp/
+/*.png
+/e2e/
 .idea/
 *.swp
 *.swo
