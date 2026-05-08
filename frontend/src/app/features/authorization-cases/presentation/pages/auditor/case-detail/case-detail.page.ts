@@ -354,17 +354,32 @@ export class AuditorCaseDetailPage {
    */
   protected readonly traceSteps = signal<readonly TraceStep[]>([]);
 
+  /**
+   * Nonce monotónico para invalidar respuestas stale.
+   *
+   * Comparar contra `caseId()` no alcanza: si el user navega A → B → A
+   * suficientemente rápido, la respuesta tardía de la PRIMERA carga de A
+   * pasa el guard `caseId() === id` cuando vuelve, y pisa el resultado
+   * fresco de la segunda carga. Cada disparo del effect captura el nonce
+   * actual; al recibir, comparamos contra el nonce vigente y descartamos
+   * si difiere.
+   */
+  private loadTraceNonce = 0;
+
   constructor() {
     // Sincroniza la selección con el id del route param.
     effect(() => {
       const id = this.caseId();
+      // Cada effect run reserva un nuevo nonce — incluso si el id no cambia,
+      // cualquier carga en vuelo previa queda invalidada.
+      const myNonce = ++this.loadTraceNonce;
       if (id) {
         this.facade.selectCase(id);
         // No await — el effect es síncrono; cargamos el trace en background
         // y el signal se actualiza cuando llega la respuesta. Reset previo
         // para evitar mostrar el trace de un caso anterior durante la espera.
         this.traceSteps.set([]);
-        void this.loadTraceFor(id);
+        void this.loadTraceFor(id, myNonce);
       } else {
         this.facade.clearSelection();
         this.traceSteps.set([]);
@@ -372,15 +387,15 @@ export class AuditorCaseDetailPage {
     });
   }
 
-  private async loadTraceFor(id: string): Promise<void> {
+  private async loadTraceFor(id: string, nonce: number): Promise<void> {
     try {
       const trace = await this.caseRepository.loadTrace(id);
-      // Si el id cambió mientras cargábamos (navegación rápida), descartamos.
-      if (this.caseId() !== id) return;
+      // Si llegó un effect run posterior, su nonce >> el nuestro: descartamos.
+      if (nonce !== this.loadTraceNonce) return;
       this.traceSteps.set(trace);
     } catch {
       // Empty state ("Esperando primer paso del agente…") cubre el fallo.
-      if (this.caseId() === id) this.traceSteps.set([]);
+      if (nonce === this.loadTraceNonce) this.traceSteps.set([]);
     }
   }
 
