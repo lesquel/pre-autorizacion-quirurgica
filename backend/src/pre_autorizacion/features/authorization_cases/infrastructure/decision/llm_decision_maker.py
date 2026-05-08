@@ -14,8 +14,9 @@ Política PRD §3.1.3:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, Self, final
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (
@@ -39,6 +40,15 @@ if TYPE_CHECKING:
     from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
 
 
+_logger = structlog.get_logger("decision.llm")
+
+
+# Heurísticas de confidence coherentes con los extractores.
+_MIN_CONFIDENCE_DEFAULT: Final[float] = 0.50
+_DEFAULT_CONFIDENCE_WHEN_DECIDED: Final[float] = 0.65
+_SUSPICIOUS_CONFIDENCE_THRESHOLD: Final[float] = 0.50
+
+
 SYSTEM_PROMPT: Final[str] = (
     "Sos un agente de pre-autorización médica del sistema de salud. Reglas DURAS:\n"
     "1. NUNCA auto-rechazás un caso. Si dudás, devolvé outcome=ESCALATED.\n"
@@ -48,7 +58,15 @@ SYSTEM_PROMPT: Final[str] = (
     "5. Tu rationale es para un auditor humano: técnico, conciso, en español.\n"
     "6. Cada ítem en evidence debe tener source \"report\" o \"policy\" (minúsculas), "
     "field (campo del dato, ej. procedure, coverage), quote (texto literal citado).\n"
-    "7. Incluí confidence entre 0 y 1 (ej. coherente con la extracción previa).\n"
+    "7. `confidence` (0.0–1.0) es OBLIGATORIO en CADA respuesta. Es tu confianza "
+    "GLOBAL en la decisión. Reglas de asignación:\n"
+    "   • 0.90–1.00 → caso textbook: cobertura clara, datos completos, sin ambigüedad.\n"
+    "   • 0.75–0.89 → decisión sólida con mínima inferencia (default razonable).\n"
+    "   • 0.60–0.74 → decisión defendible pero con algún punto a revisar.\n"
+    "   • 0.50–0.59 → ambigüedad real: típicamente acompañado de outcome=ESCALATED.\n"
+    "   • <0.50 → SOLO si la información es contradictoria o casi inutilizable.\n"
+    "   REGLA DURA: NUNCA devuelvas confidence=0 si emitiste un outcome y un "
+    "rationale coherentes. Mínimo 0.50. Si dudás, usá 0.70.\n"
     "8. Si outcome=ESCALATED, escalation_reason DEBE ser exactamente uno de estos "
     "strings en inglés (sin texto libre): WAITING_PERIOD_NOT_MET, "
     "LOW_CONFIDENCE_PROCEDURE_MATCH, PDF_EXTRACTION_FAILURE, PROCEDURE_NOT_COVERED, "
@@ -154,7 +172,12 @@ def _coerce_escalation_reason_value(raw: object, *, outcome_is_escalated: bool) 
 
 
 class _DecisionSchema(BaseModel):
-    """Schema interno con el shape de `AgentDecision` (sin decided_by/model_used)."""
+    """Schema interno con el shape de `AgentDecision` (sin decided_by/model_used).
+
+    `confidence` se mantiene con default razonable (0.82) para compat con LLMs
+    que ya respetan el campo, pero un `model_validator` blinda contra DeepSeek
+    devolviendo 0.0 a pesar de tener outcome+rationale válidos.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -164,7 +187,10 @@ class _DecisionSchema(BaseModel):
         default=0.82,
         ge=0.0,
         le=1.0,
-        description="Confianza global de la decisión [0.0, 1.0].",
+        description=(
+            "Confianza global de la decisión [0.0, 1.0]. OBLIGATORIO. "
+            "NUNCA 0 si emitiste outcome y rationale coherentes. Mínimo 0.50."
+        ),
     )
     evidence: list[_EvidenceItemSchema] = Field(
         default_factory=list,
@@ -196,6 +222,33 @@ class _DecisionSchema(BaseModel):
         )
         return out
 
+    @model_validator(mode="after")
+    def _enforce_min_confidence_when_decided(self) -> Self:
+        """Blinda contra LLMs que devuelven confidence=0 con decisión coherente.
+
+        Si hay un `rationale` no trivial (>= 8 chars) Y el outcome no es un
+        fallback artificial, forzamos `confidence >= _MIN_CONFIDENCE_DEFAULT`.
+        Esto evita el bug de DeepSeek json_mode donde el LLM emite el outcome y
+        rationale correctos pero "olvida" el campo `confidence` (caída al
+        default antiguo 0.0 — ahora 0.82, pero blindado igual por seguridad).
+        """
+        rationale_substantial = len((self.rationale or "").strip()) >= 8
+        if rationale_substantial and self.confidence < _MIN_CONFIDENCE_DEFAULT:
+            _logger.warning(
+                "llm.confidence_suspicious",
+                source="llm_decision_maker",
+                original_confidence=self.confidence,
+                clamped_to=_DEFAULT_CONFIDENCE_WHEN_DECIDED,
+                outcome=self.outcome.value,
+                escalation_reason=(
+                    self.escalation_reason.value if self.escalation_reason else None
+                ),
+                rationale_preview=(self.rationale or "")[:120],
+                reason="LLM devolvió confidence muy baja pese a rationale coherente",
+            )
+            object.__setattr__(self, "confidence", _DEFAULT_CONFIDENCE_WHEN_DECIDED)
+        return self
+
 
 @final
 class LlmAuthorizationDecisionMaker(AuthorizationDecisionMaker):
@@ -218,6 +271,19 @@ class LlmAuthorizationDecisionMaker(AuthorizationDecisionMaker):
             Evidence(source=item.source, field=item.field, quote=item.quote)
             for item in result.evidence
         )
+
+        # Logueo defensivo: confidence sospechosa post-validator.
+        if (
+            result.confidence < _SUSPICIOUS_CONFIDENCE_THRESHOLD
+            and (result.rationale or "").strip()
+        ):
+            _logger.info(
+                "llm.confidence_suspicious",
+                source="llm_decision_maker.post_validate",
+                confidence=result.confidence,
+                outcome=result.outcome.value,
+                rationale_preview=(result.rationale or "")[:120],
+            )
 
         return AgentDecision(
             outcome=result.outcome,

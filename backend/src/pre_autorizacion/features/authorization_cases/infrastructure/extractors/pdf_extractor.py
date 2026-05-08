@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import base64
 import binascii
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, Self, final
 
-from pydantic import BaseModel, Field
+import structlog
+from pydantic import BaseModel, Field, model_validator
 
 from pre_autorizacion.features.authorization_cases.domain.entities.medical_report import (
     MedicalReport,
@@ -46,6 +47,9 @@ if TYPE_CHECKING:
     from pre_autorizacion.shared.vision.ports.vision_extractor import VisionExtractor
 
 
+_logger = structlog.get_logger("extractors.pdf")
+
+
 DATA_URI_PREFIX: Final[str] = "data:application/pdf;base64,"
 
 # Contenido mínimo (hints del hospital + texto pypdf) para intentar el LLM de texto.
@@ -53,26 +57,77 @@ _MIN_MERGED_TEXT_CHARS: Final[int] = 24
 # Límite razonable para el prompt del LLM de texto (post pypdf).
 _MAX_TEXT_CHARS_FOR_LLM: Final[int] = 12_000
 
+# Mismas heurísticas que el text extractor para coherencia entre adapters.
+_MIN_CONFIDENCE_WHEN_EXTRACTED: Final[float] = 0.40
+_DEFAULT_CONFIDENCE_WHEN_EXTRACTED: Final[float] = 0.50
+_SUSPICIOUS_CONFIDENCE_THRESHOLD: Final[float] = 0.50
+
 
 EXTRACTION_PROMPT: Final[str] = (
     "Analizá este informe médico en PDF y extraé las entidades clínicas: "
     "procedimiento solicitado (nombre + código CIE-10 si lo deducís), "
     "diagnóstico (descripción + código CIE-10), y citas TEXTUALES del documento "
     "que respalden la extracción. NUNCA inventes datos: si un campo no está, "
-    "devolvelo como null. Asigná un confidence ∈ [0.0, 1.0] que refleje qué tan "
-    "claro está el informe."
+    "devolvelo como null.\n\n"
+    "── CÓMO ASIGNAR `confidence` (0.0–1.0) ──\n"
+    "Es OBLIGATORIO emitir `confidence` en CADA respuesta. Reglas:\n"
+    "• 0.90–1.00 → procedimiento Y diagnóstico TEXTUALES y unambiguos.\n"
+    "• 0.70–0.89 → uno explícito, otro fuertemente inferible por contexto clínico.\n"
+    "• 0.50–0.69 → inferibles pero no textuales, o sólo uno con certeza.\n"
+    "• 0.40–0.49 → extracción parcial con ambigüedad real.\n"
+    "• <0.40 → informe ininteligible, contradictorio o vacío.\n"
+    "• 0.00 → SOLO si TODOS los campos quedaron null.\n\n"
+    "REGLA DURA: si extrajiste AL MENOS UN campo, `confidence` DEBE ser >= 0.50. "
+    "NUNCA confidence=0 con extracción exitosa. Si dudás, usá 0.60."
 )
 
 
 class _PdfExtractionSchema(BaseModel):
-    """Schema que Gemini debe respetar (mismo shape que el text extractor)."""
+    """Schema que Gemini debe respetar (mismo shape que el text extractor).
+
+    `confidence` es **required** (sin default) para forzar al LLM a emitirlo.
+    El `model_validator` blinda contra el caso patológico de confidence=0 con
+    campos extraídos no-null.
+    """
 
     extracted_procedure_name: str | None = Field(default=None)
     extracted_procedure_code: str | None = Field(default=None)
     extracted_diagnosis_code: str | None = Field(default=None)
     extracted_diagnosis_description: str | None = Field(default=None)
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confianza de la extracción [0.0, 1.0]. OBLIGATORIO. "
+            "Si extrajiste algún campo, DEBE ser >= 0.50."
+        ),
+    )
     evidence_quotes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _enforce_min_confidence_when_extracted(self) -> Self:
+        """Blinda contra LLMs que devuelven confidence=0 con extracción exitosa."""
+        has_extraction = any(
+            (
+                self.extracted_procedure_name,
+                self.extracted_procedure_code,
+                self.extracted_diagnosis_code,
+                self.extracted_diagnosis_description,
+            )
+        )
+        if has_extraction and self.confidence < _MIN_CONFIDENCE_WHEN_EXTRACTED:
+            _logger.warning(
+                "llm.confidence_suspicious",
+                source="pdf_extractor",
+                original_confidence=self.confidence,
+                clamped_to=_DEFAULT_CONFIDENCE_WHEN_EXTRACTED,
+                procedure_name=self.extracted_procedure_name,
+                procedure_code=self.extracted_procedure_code,
+                diagnosis_code=self.extracted_diagnosis_code,
+                reason="Vision LLM devolvió confidence muy baja pese a extraer campos",
+            )
+            object.__setattr__(self, "confidence", _DEFAULT_CONFIDENCE_WHEN_EXTRACTED)
+        return self
 
 
 @final
@@ -111,6 +166,20 @@ class PdfMedicalReportExtractor(MedicalReportExtractor):
             except (NotImplementedError, VisionExtractionError):
                 pass
             else:
+                if result.confidence < _SUSPICIOUS_CONFIDENCE_THRESHOLD and any(
+                    (
+                        result.extracted_procedure_name,
+                        result.extracted_procedure_code,
+                        result.extracted_diagnosis_code,
+                    )
+                ):
+                    _logger.info(
+                        "llm.confidence_suspicious",
+                        source="pdf_extractor.post_validate",
+                        confidence=result.confidence,
+                        procedure_name=result.extracted_procedure_name,
+                        report_id=str(report.id),
+                    )
                 return ExtractedMedicalReport(
                     extracted_procedure_name=result.extracted_procedure_name,
                     extracted_procedure_code=result.extracted_procedure_code,
