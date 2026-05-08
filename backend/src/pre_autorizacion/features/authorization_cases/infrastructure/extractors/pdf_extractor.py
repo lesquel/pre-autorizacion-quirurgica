@@ -121,11 +121,20 @@ class _PdfExtractionSchema(BaseModel):
                 source="pdf_extractor",
                 original_confidence=self.confidence,
                 clamped_to=_DEFAULT_CONFIDENCE_WHEN_EXTRACTED,
-                procedure_name=self.extracted_procedure_name,
-                procedure_code=self.extracted_procedure_code,
-                diagnosis_code=self.extracted_diagnosis_code,
+                # Campos de baja entropía (CIE-10, catálogo cerrado): hashear es
+                # rainbow-table-reversible. Logueamos sólo presencia + longitud.
+                procedure_name_present=self.extracted_procedure_name is not None,
+                procedure_name_len=len(self.extracted_procedure_name or ""),
+                procedure_code_present=self.extracted_procedure_code is not None,
+                procedure_code_len=len(self.extracted_procedure_code or ""),
+                diagnosis_code_present=self.extracted_diagnosis_code is not None,
+                diagnosis_code_len=len(self.extracted_diagnosis_code or ""),
                 reason="Vision LLM devolvió confidence muy baja pese a extraer campos",
             )
+            # Usamos `object.__setattr__` deliberadamente (NO `self.confidence = X`):
+            # robusto si alguien activa `validate_assignment=True` en el futuro
+            # (que con `self.x =` causaría recursión infinita en este validator).
+            # Ambos evaden re-validación con `validate_assignment=False` (default).
             object.__setattr__(self, "confidence", _DEFAULT_CONFIDENCE_WHEN_EXTRACTED)
         return self
 
@@ -177,7 +186,10 @@ class PdfMedicalReportExtractor(MedicalReportExtractor):
                         "llm.confidence_suspicious",
                         source="pdf_extractor.post_validate",
                         confidence=result.confidence,
-                        procedure_name=result.extracted_procedure_name,
+                        # Solo presencia + longitud — el nombre del procedimiento
+                        # es de catálogo cerrado (baja entropía), hashearlo no protege.
+                        procedure_name_present=result.extracted_procedure_name is not None,
+                        procedure_name_len=len(result.extracted_procedure_name or ""),
                         report_id=str(report.id),
                     )
                 return ExtractedMedicalReport(

@@ -17,7 +17,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final, Self, final
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from langchain_core.exceptions import OutputParserException
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (
     AuthorizationDecisionMaker,
@@ -35,6 +36,7 @@ from pre_autorizacion.features.authorization_cases.domain.value_objects.evidence
     EvidenceSource,
 )
 from pre_autorizacion.features.authorization_cases.domain.value_objects.outcome import Outcome
+from pre_autorizacion.shared.logging import hash_pii
 
 if TYPE_CHECKING:
     from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
@@ -79,8 +81,23 @@ SYSTEM_PROMPT: Final[str] = (
 )
 
 
+class _UnknownEvidenceSourceError(ValueError):
+    """Marker para evidence items que no resuelven a 'report' o 'policy' exactos.
+
+    Lo levantamos desde el `model_validator(mode='before')` para que el caller
+    pueda filtrarlos antes del list-validation y evitar fabricar evidencia con
+    un source inventado. Mantener un error específico (en vez de `ValueError`
+    genérico) facilita el filtrado preciso en `_DecisionSchema`.
+    """
+
+
 class _EvidenceItemSchema(BaseModel):
-    """Item de evidencia que el LLM emite (acepta alias sueltos del modelo)."""
+    """Item de evidencia que el LLM emite (acepta alias sueltos del modelo).
+
+    `source` se exige EXACTO (case-insensitive) — `report` o `policy`. Antes
+    cualquier string desconocido caía silenciosamente a `REPORT`, lo que
+    fabricaba evidencia falsa (un policy quote etiquetado como report).
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -112,25 +129,36 @@ class _EvidenceItemSchema(BaseModel):
             return out
         if isinstance(raw_src, str):
             low = raw_src.strip().lower()
-            if low in ("report", "policy"):
-                out["source"] = low
-            elif any(
-                tok in low
-                for tok in (
-                    "cobertura",
-                    "póliza",
-                    "poliza",
-                    "coverage",
-                    "plan",
-                    "carencia",
-                    "copago",
-                )
-            ):
+            if low == "report":
+                out["source"] = EvidenceSource.REPORT.value
+            elif low == "policy":
                 out["source"] = EvidenceSource.POLICY.value
             else:
-                out["source"] = EvidenceSource.REPORT.value
+                # Source desconocido — NO fabricamos un valor por defecto
+                # para evitar mentir al auditor sobre el origen de la cita.
+                _logger.warning(
+                    "evidence.source.unknown",
+                    raw_source=raw_src,
+                    field=out.get("field"),
+                    # `quote` puede contener texto literal del informe médico (PHI).
+                    # Hasheamos para defense-in-depth + longitud como señal numérica.
+                    quote_hash=hash_pii(q),
+                    quote_len=len(q),
+                )
+                raise _UnknownEvidenceSourceError(
+                    f"unknown evidence source: {raw_src!r}"
+                )
         else:
-            out["source"] = EvidenceSource.REPORT.value
+            _logger.warning(
+                "evidence.source.unknown",
+                raw_source=repr(raw_src),
+                field=out.get("field"),
+                quote_hash=hash_pii(q),
+                quote_len=len(q),
+            )
+            raise _UnknownEvidenceSourceError(
+                f"non-string evidence source: {raw_src!r}"
+            )
         if not str(out.get("field") or "").strip():
             out["field"] = "summary"
         return out
@@ -174,9 +202,13 @@ def _coerce_escalation_reason_value(raw: object, *, outcome_is_escalated: bool) 
 class _DecisionSchema(BaseModel):
     """Schema interno con el shape de `AgentDecision` (sin decided_by/model_used).
 
-    `confidence` se mantiene con default razonable (0.82) para compat con LLMs
-    que ya respetan el campo, pero un `model_validator` blinda contra DeepSeek
-    devolviendo 0.0 a pesar de tener outcome+rationale válidos.
+    `confidence` es **required** (sin default) para forzar al LLM a emitirlo
+    explícitamente. Un default silencioso (0.82) era PEOR que 0.0: pasaba el
+    `confidence_gate` del rule engine sin que el modelo hubiera realmente
+    evaluado el caso. Si DeepSeek lo omite ahora, Pydantic falla el parseo y
+    el use case escala con `escalation_reason='UNEXPECTED_ERROR'` o similar.
+    Un `model_validator` adicional sigue blindando el caso patológico de
+    confidence muy baja con rationale coherente.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -184,7 +216,6 @@ class _DecisionSchema(BaseModel):
     outcome: Outcome = Field(description="Resultado: APPROVED_AUTO, DOCS_REQUESTED o ESCALATED.")
     rationale: str = Field(description="Razonamiento técnico-clínico para auditor.")
     confidence: float = Field(
-        default=0.82,
         ge=0.0,
         le=1.0,
         description=(
@@ -220,17 +251,38 @@ class _DecisionSchema(BaseModel):
             out.get("escalation_reason"),
             outcome_is_escalated=escalated,
         )
+        # Filtramos evidence items con `source` desconocido ANTES de la list-validation:
+        # `_EvidenceItemSchema` levanta `_UnknownEvidenceSourceError` para sources que
+        # no son exactamente 'report' / 'policy', y queremos descartarlos en vez de
+        # hacer fallar el parseo entero (la decisión sigue siendo válida sin esa cita).
+        raw_evidence = out.get("evidence")
+        if isinstance(raw_evidence, list):
+            kept: list[object] = []
+            for item in raw_evidence:
+                try:
+                    kept.append(_EvidenceItemSchema.model_validate(item))
+                except _UnknownEvidenceSourceError:
+                    # Ya quedó logueado dentro del validator del item; sólo descartamos.
+                    continue
+                except Exception:  # noqa: BLE001 — otros errores reales suben en el segundo pase.
+                    # Dejamos el ítem crudo para que la list-validation principal lo
+                    # reporte si es realmente inválido por otra razón.
+                    kept.append(item)
+            out["evidence"] = kept
         return out
 
     @model_validator(mode="after")
     def _enforce_min_confidence_when_decided(self) -> Self:
-        """Blinda contra LLMs que devuelven confidence=0 con decisión coherente.
+        """Blinda contra LLMs que devuelven confidence muy baja con decisión coherente.
 
-        Si hay un `rationale` no trivial (>= 8 chars) Y el outcome no es un
-        fallback artificial, forzamos `confidence >= _MIN_CONFIDENCE_DEFAULT`.
-        Esto evita el bug de DeepSeek json_mode donde el LLM emite el outcome y
-        rationale correctos pero "olvida" el campo `confidence` (caída al
-        default antiguo 0.0 — ahora 0.82, pero blindado igual por seguridad).
+        El campo `confidence` es **required** en el schema (sin default): si
+        DeepSeek lo omite, Pydantic levanta `ValidationError` que
+        `LlmAuthorizationDecisionMaker.decide()` atrapa y traduce a un
+        `AgentDecision` ESCALATED sintético. Este validator NO ataca la omisión
+        — ataca el caso patológico distinto en que el LLM **sí emite** confidence
+        pero con valor demasiado bajo (típicamente 0.0–0.30) pese a un rationale
+        coherente. En ese caso elevamos a `_DEFAULT_CONFIDENCE_WHEN_DECIDED` y
+        logueamos para diagnóstico.
         """
         rationale_substantial = len((self.rationale or "").strip()) >= 8
         if rationale_substantial and self.confidence < _MIN_CONFIDENCE_DEFAULT:
@@ -243,9 +295,16 @@ class _DecisionSchema(BaseModel):
                 escalation_reason=(
                     self.escalation_reason.value if self.escalation_reason else None
                 ),
-                rationale_preview=(self.rationale or "")[:120],
+                # `rationale` clínico → hasheado, evitamos PHI en plano.
+                rationale_hash=hash_pii(self.rationale),
                 reason="LLM devolvió confidence muy baja pese a rationale coherente",
             )
+            # Usamos `object.__setattr__` deliberadamente (NO `self.confidence = X`):
+            # ambos evaden la re-validación cuando `validate_assignment=False`
+            # (default, nuestro caso), pero si en el futuro alguien activa
+            # `validate_assignment=True` para hardening, `self.x =` causa
+            # recursión infinita (el setter re-dispara el validator). El
+            # __setattr__ directo es robusto a ese cambio. Ver R3-5 del judgment day.
             object.__setattr__(self, "confidence", _DEFAULT_CONFIDENCE_WHEN_DECIDED)
         return self
 
@@ -260,12 +319,53 @@ class LlmAuthorizationDecisionMaker(AuthorizationDecisionMaker):
 
     async def decide(self, context: DecisionContext) -> AgentDecision:
         prompt = self._build_prompt(context)
-        result = await self._llm.complete_structured(
-            prompt,
-            schema=_DecisionSchema,
-            system=SYSTEM_PROMPT,
-            temperature=0.0,
-        )
+        try:
+            result = await self._llm.complete_structured(
+                prompt,
+                schema=_DecisionSchema,
+                system=SYSTEM_PROMPT,
+                temperature=0.0,
+            )
+        except (ValidationError, OutputParserException) as exc:
+            # Dos modos de fallo del LLM provider que tenemos que atrapar
+            # acá para no romper el flow:
+            # - ValidationError: DeepSeek omitió `confidence` (campo required) o
+            #   devolvió un payload que no cumple el schema (causa raíz original
+            #   del bug del 0.00 que arreglamos en R1).
+            # - OutputParserException: el LLM devolvió texto no-JSON ("I cannot
+            #   help with that"), típico cuando refusa o cuando json_mode falla.
+            # Política PRD §3.1.3: NUNCA auto-rechazar; ante duda, ESCALAR.
+            #
+            # NO logueamos `str(exc)` porque pydantic incluye los input values
+            # en el mensaje, y un payload malformado del LLM puede contener PHI
+            # textual del informe (ver R3-3 del judgment day).
+            error_types: list[str] = (
+                [e.get("type", "unknown") for e in exc.errors()]
+                if isinstance(exc, ValidationError)
+                else ["output_parser"]
+            )
+            _logger.error(
+                "llm.structured_output_failed",
+                error_class=type(exc).__name__,
+                error_count=(
+                    exc.error_count() if isinstance(exc, ValidationError) else 1
+                ),
+                error_types=error_types,
+                model=self._model_name,
+            )
+            return AgentDecision(
+                outcome=Outcome.ESCALATED,
+                rationale=(
+                    "El LLM no devolvió un structured output válido. Escalado "
+                    "por seguridad. (Posible mal-comportamiento del LLM provider.)"
+                ),
+                confidence=0.0,
+                decided_by=DecidedBy.AGENT,
+                evidence=(),
+                missing_docs=(),
+                escalation_reason=EscalationReason.UNEXPECTED_ERROR,
+                model_used=self._model_name,
+            )
 
         evidence = tuple(
             Evidence(source=item.source, field=item.field, quote=item.quote)
@@ -282,7 +382,8 @@ class LlmAuthorizationDecisionMaker(AuthorizationDecisionMaker):
                 source="llm_decision_maker.post_validate",
                 confidence=result.confidence,
                 outcome=result.outcome.value,
-                rationale_preview=(result.rationale or "")[:120],
+                # `rationale` clínico hasheado para no filtrar PHI a logs.
+                rationale_hash=hash_pii(result.rationale),
             )
 
         return AgentDecision(

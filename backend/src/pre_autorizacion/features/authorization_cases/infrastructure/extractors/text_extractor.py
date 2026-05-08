@@ -128,12 +128,21 @@ class _TextExtractionSchema(BaseModel):
                 source="text_extractor",
                 original_confidence=self.confidence,
                 clamped_to=_DEFAULT_CONFIDENCE_WHEN_EXTRACTED,
-                procedure_name=self.extracted_procedure_name,
-                procedure_code=self.extracted_procedure_code,
-                diagnosis_code=self.extracted_diagnosis_code,
+                # Campos clínicos de BAJA ENTROPÍA (CIE-10 ~70K valores, catálogo
+                # cerrado): hashear es defense theater (rainbow table trivial).
+                # Logueamos sólo presencia + longitud — señal sin contenido.
+                procedure_name_present=self.extracted_procedure_name is not None,
+                procedure_name_len=len(self.extracted_procedure_name or ""),
+                procedure_code_present=self.extracted_procedure_code is not None,
+                procedure_code_len=len(self.extracted_procedure_code or ""),
+                diagnosis_code_present=self.extracted_diagnosis_code is not None,
+                diagnosis_code_len=len(self.extracted_diagnosis_code or ""),
                 reason="LLM devolvió confidence muy baja pese a extraer campos",
             )
-            # Pydantic v2 permite reasignar campos en validators `mode='after'`.
+            # Usamos `object.__setattr__` deliberadamente (NO `self.confidence = X`):
+            # robusto si alguien activa `validate_assignment=True` en el futuro
+            # (que con `self.x =` causaría recursión infinita en este validator).
+            # Ambos evaden re-validación con `validate_assignment=False` (default).
             object.__setattr__(self, "confidence", _DEFAULT_CONFIDENCE_WHEN_EXTRACTED)
         return self
 
@@ -173,7 +182,10 @@ class TextMedicalReportExtractor(MedicalReportExtractor):
                 "llm.confidence_suspicious",
                 source="text_extractor.post_validate",
                 confidence=result.confidence,
-                procedure_name=result.extracted_procedure_name,
+                # Sólo presencia + longitud — código clínico es de baja entropía
+                # (catálogo cerrado), hashearlo no protege.
+                procedure_name_present=result.extracted_procedure_name is not None,
+                procedure_name_len=len(result.extracted_procedure_name or ""),
                 report_id=str(report.id),
             )
 
