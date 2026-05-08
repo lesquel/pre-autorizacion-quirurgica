@@ -1,0 +1,99 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "▶ Dev: Backend + Frontend",
+      "detail": "Corre uvicorn (:8000) y ng serve (:4200) en paralelo en pestañas dedicadas",
+      "dependsOn": ["▶ Backend (uvicorn)", "▶ Frontend (ng serve)"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "▶ Backend (uvicorn)",
+      "type": "shell",
+      "command": "uv run uvicorn pre_autorizacion.main:app --reload --host 0.0.0.0 --port 8000",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "reveal": "always", "group": "dev" },
+      "problemMatcher": []
+    },
+    {
+      "label": "▶ Frontend (ng serve)",
+      "type": "shell",
+      "command": "npm start",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "reveal": "always", "group": "dev" },
+      "problemMatcher": []
+    },
+    {
+      "label": "📦 Install all deps",
+      "detail": "uv sync + npm ci",
+      "type": "shell",
+      "command": "make install",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "✅ Test: Backend (pytest)",
+      "type": "shell",
+      "command": "uv run pytest",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "🔍 Typecheck: Backend (mypy)",
+      "type": "shell",
+      "command": "uv run mypy src/",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔍 Typecheck: Frontend (tsc)",
+      "type": "shell",
+      "command": "npx tsc --noEmit -p tsconfig.app.json",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "🧹 Lint: Backend (ruff)",
+      "type": "shell",
+      "command": "uv run ruff check . && uv run ruff format --check .",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "🛠 Format: Backend (ruff format)",
+      "type": "shell",
+      "command": "uv run ruff format .",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "♻️ OpenAPI typegen (BE running)",
+      "detail": "Refresca frontend/openapi.json + regenera schema.d.ts",
+      "type": "shell",
+      "command": "make openapi-sync && make typegen",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "✅ Check: lint + typecheck + tests",
+      "detail": "Lo que correría CI",
+      "type": "shell",
+      "command": "make check",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "problemMatcher": []
+    }
+  ]
+}
