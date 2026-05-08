@@ -10,8 +10,9 @@ Decisiones:
 - `jwt_secret` tiene un default flagrante; un validator levanta error en
   `production` y warning en cualquier otro env si sigue siendo el default.
 - `cors_origins` se parsea de un string CSV en env (`a,b,c`) o ya como lista
-  si se monta programáticamente (`pydantic-settings` no parsea CSV de listas
-  por defecto, así que se hace en un validator).
+  si se monta programáticamente. Se usa `NoDecode` para que pydantic-settings
+  no intente `json.loads` en el `.env` (solo JSON tipo `["http://a"]` sería válido
+  sin eso).
 - `use_notion` es un computed_field — `True` si hay `notion_token`. Los
   factories en `config/di.py` lo consultan para decidir adapters Notion vs
   in-memory.
@@ -22,10 +23,10 @@ from __future__ import annotations
 import warnings
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 DEFAULT_JWT_SECRET = "changeme-please-very-secret-and-long-at-least-32-chars"
 
@@ -83,7 +84,9 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
 
     # ── CORS ─────────────────────────────────────────────────────────────
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:4200"])
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:4200"]
+    )
 
     # ── Validators ───────────────────────────────────────────────────────
 

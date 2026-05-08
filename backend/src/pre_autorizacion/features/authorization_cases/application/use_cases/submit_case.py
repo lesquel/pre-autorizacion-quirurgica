@@ -8,6 +8,10 @@ Diseño:
 - Cuando hay orchestrator real (Wave B3 / LangGraph), delega — el flow MOCK
   queda como fallback para demos sin LLM key.
 
+Si la póliza (y/o coberturas) no existen en el catálogo persistido, se **registran
+automáticamente** en esta primera subida — típico cuando el número viene solo del
+PDF y los jurados no conocen números de demo.
+
 Los errores de dominio (`PolicyNotFoundError`, `CoverageNotFoundError`) heredan
 de `NotFoundError` (`shared/domain/errors.py`) → 404 a nivel HTTP por el handler
 global.
@@ -18,7 +22,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from pre_autorizacion.features.authorization_cases.domain.entities import (
@@ -43,6 +48,7 @@ from pre_autorizacion.features.authorization_cases.infrastructure.decision.rule_
     evaluate_authorization,
 )
 from pre_autorizacion.features.policies.domain import PolicyNotFoundError
+from pre_autorizacion.features.policies.domain.entities import Coverage, Policy, PolicyStatus
 from pre_autorizacion.shared.domain.errors import NotFoundError
 
 if TYPE_CHECKING:
@@ -52,7 +58,6 @@ if TYPE_CHECKING:
     from pre_autorizacion.features.authorization_cases.domain.ports.case_repository import (
         CaseRepository,
     )
-    from pre_autorizacion.features.policies.domain.entities import Coverage, Policy
     from pre_autorizacion.features.policies.domain.ports import (
         CoverageRepository,
         PolicyRepository,
@@ -89,6 +94,56 @@ class SubmitCaseInput:
     policy_number: str
     scenario_key: str | None = None
     case_id: str | None = None
+
+
+# ─── Alta automática de catálogo (primera vez que aparece la póliza) ───────
+
+
+def _hint_looks_like_notion_page_id(hint: str) -> bool:
+    raw = hint.strip()
+    if len(raw) < 32:
+        return False
+    try:
+        uuid.UUID(raw)
+    except ValueError:
+        return False
+    return True
+
+
+def _procedure_code_from_report(report: MedicalReport) -> str:
+    hint = (report.procedure_solicited_hint or "").strip()
+    if not hint or _hint_looks_like_notion_page_id(hint):
+        return "UNKNOWN"
+    if hint[0].isalpha() and any(ch.isdigit() for ch in hint):
+        return hint
+    return "UNKNOWN"
+
+
+def _auto_registered_policy(policy_number: str) -> Policy:
+    today = date.today()
+    pn = policy_number.strip()
+    return Policy(
+        number=pn,
+        patient_id="",
+        plan="Registrada automáticamente (solicitud)",
+        insurer_id="",
+        start_date=today - timedelta(days=400),
+        end_date=today + timedelta(days=365),
+        status=PolicyStatus.ACTIVE,
+    )
+
+
+def _auto_registered_coverage(policy_number: str, report: MedicalReport) -> Coverage:
+    pn = policy_number.strip()
+    code = _procedure_code_from_report(report)
+    return Coverage(
+        policy_number=pn,
+        procedure_code=code,
+        covered=True,
+        waiting_days=0,
+        copay=Decimal("0"),
+        required_docs=(),
+    )
 
 
 # ─── Internos del flow MOCK ────────────────────────────────────────────────
@@ -181,29 +236,24 @@ class SubmitCaseUseCase:
         """Ejecuta el caso end-to-end.
 
         Pasos:
-            1. Resolver `Policy` y `Coverage`.
+            1. Resolver `Policy` y `Coverage` (creando filas mínimas si no existían).
             2. Crear el caso con `status=PENDIENTE`.
             3. Persistirlo (estado inicial).
             4. Correr el flow (MOCK o real) → `AgentDecision` + traza.
             5. Update del caso con la decisión final.
             6. Re-fetch para devolver la versión persistida.
         """
-        policy = await self.policy_repository.find_by_number(input.policy_number)
-        if policy is None:
-            raise PolicyNotFoundError(f"No policy found for number={input.policy_number!r}")
-
-        coverages = await self.coverage_repository.list_for_policy(input.policy_number)
+        pn = input.policy_number.strip()
+        policy, coverages = await self._ensure_catalog_for_upload(pn, input.report)
         coverage = self._select_coverage(coverages, input.report)
         if coverage is None:
-            raise CoverageNotFoundError(
-                f"No coverage found for policy={input.policy_number!r}"
-            )
+            raise CoverageNotFoundError(f"No coverage found for policy={pn!r}")
 
         created_at = datetime.now(UTC)
         case = AuthorizationCase(
             id=input.case_id or f"CASE-{uuid.uuid4().hex[:8].upper()}",
             report_id=input.report.id,
-            policy_number=input.policy_number,
+            policy_number=pn,
             status=CaseStatus.PENDIENTE,
             created_at=created_at,
         )
@@ -236,6 +286,38 @@ class SubmitCaseUseCase:
                 decided_at=decided_at,
             )
         return refreshed
+
+    async def _ensure_catalog_for_upload(
+        self,
+        policy_number: str,
+        report: MedicalReport,
+    ) -> tuple[Policy, tuple[Coverage, ...]]:
+        """Garantiza filas de catálogo para poder evaluar el caso.
+
+        Si la póliza no existe, se crea con valores placeholder razonables.
+        Si no hay coberturas para ese número, se inserta una cobertura mínima
+        (procedimiento deducido del informe cuando sea posible).
+        """
+        pn = policy_number.strip()
+        if not pn:
+            raise PolicyNotFoundError("No policy found for number=''")
+
+        policy = await self.policy_repository.find_by_number(pn)
+        if policy is None:
+            await self.policy_repository.create(_auto_registered_policy(pn))
+            policy = await self.policy_repository.find_by_number(pn)
+            if policy is None:
+                raise PolicyNotFoundError(f"No policy found for number={pn!r}")
+
+        coverages = await self.coverage_repository.list_for_policy(pn)
+        if not coverages:
+            await self.coverage_repository.replace_for_policy(
+                pn,
+                (_auto_registered_coverage(pn, report),),
+            )
+            coverages = await self.coverage_repository.list_for_policy(pn)
+
+        return policy, coverages
 
     # ── Helpers ────────────────────────────────────────────────────────────
 

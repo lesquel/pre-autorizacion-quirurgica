@@ -20,26 +20,23 @@ Decisiones de diseño:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
-if TYPE_CHECKING:
-    from pre_autorizacion.features.authorization_cases.domain.entities import (
-        MedicalReport,
-    )
-    from pre_autorizacion.features.authorization_cases.domain.ports.medical_report_extractor import (
-        ExtractedMedicalReport,
-        MedicalReportExtractor,
-    )
-    from pre_autorizacion.features.authorization_cases.domain.value_objects import (
-        AgentDecision,
-        EscalationReason,
-        Outcome,
-        TraceStep,
-    )
-    from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (  # noqa: E501
-        AuthorizationDecisionMaker,
-    )
-    from pre_autorizacion.features.policies.domain.entities import Coverage, Policy
+from pre_autorizacion.features.authorization_cases.domain.entities import MedicalReport
+from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (
+    AuthorizationDecisionMaker,
+)
+from pre_autorizacion.features.authorization_cases.domain.ports.medical_report_extractor import (
+    ExtractedMedicalReport,
+    MedicalReportExtractor,
+)
+from pre_autorizacion.features.authorization_cases.domain.value_objects import (
+    AgentDecision,
+    EscalationReason,
+    Outcome,
+    TraceStep,
+)
+from pre_autorizacion.features.policies.domain.entities import Coverage, Policy
 
 
 class AgentGraphState(TypedDict, total=False):

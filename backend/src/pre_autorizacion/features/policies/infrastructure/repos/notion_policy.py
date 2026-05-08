@@ -9,14 +9,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from pre_autorizacion.features.policies.domain import PolicyAlreadyExistsError
 from pre_autorizacion.features.policies.domain.entities import Policy
 from pre_autorizacion.features.policies.domain.ports import PolicyRepository
 from pre_autorizacion.shared.notion import NotionClient
-from pre_autorizacion.shared.notion.entities import notion_to_policy
+from pre_autorizacion.shared.notion.entities import notion_to_policy, policy_to_notion_props
+from pre_autorizacion.shared.notion.errors import NotionRequestError
 
 
 class NotionPolicyRepository(PolicyRepository):
-    """Adapter Notion del repo de pólizas (read-only en MVP)."""
+    """Adapter Notion del repo de pólizas (lectura + alta para registro en subida)."""
 
     def __init__(self, notion_client: NotionClient, database_id: str) -> None:
         self._client = notion_client
@@ -37,10 +39,18 @@ class NotionPolicyRepository(PolicyRepository):
             return None
         return notion_to_policy(pages[0])
 
-    async def create(self, policy: Policy) -> Policy:  # type: ignore[override]
-        raise NotImplementedError(
-            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
-        )
+    async def create(self, policy: Policy) -> Policy:
+        if await self.find_by_number(policy.number):
+            raise PolicyAlreadyExistsError(f"Policy already exists: {policy.number!r}")
+        props = policy_to_notion_props(policy)
+        await self._client.create_page(self._database_id, props)
+        created = await self.find_by_number(policy.number)
+        if created is None:
+            raise NotionRequestError(
+                f"Policy create succeeded but query by NumeroPoliza returned empty: "
+                f"{policy.number!r}",
+            )
+        return created
 
     async def update(self, policy: Policy) -> Policy:  # type: ignore[override]
         raise NotImplementedError(

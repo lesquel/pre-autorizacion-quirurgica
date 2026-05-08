@@ -1,10 +1,12 @@
 # Backend — Pre-Autorización Quirúrgica
 
-Stack: **Python 3.13+ · FastAPI · uv · Pydantic v2 · LangChain + LangGraph · DeepSeek (texto) · Gemini Vision (PDFs) · Notion (persistencia)**.
+Stack: **Python 3.12+ · FastAPI · uv · Pydantic v2 · LangChain + LangGraph · DeepSeek (texto) · Gemini Vision (PDFs) · Notion (persistencia)**.
 
 Arquitectura: **Vertical Slicing + Clean Architecture** (mirror del frontend Angular).
 
 ## Setup
+
+### Con uv (recomendado)
 
 ```bash
 cd backend
@@ -12,6 +14,19 @@ cd backend
 uv sync
 uv run uvicorn pre_autorizacion.main:app --reload
 ```
+
+### Sin uv (venv + pip)
+
+```bash
+cd backend
+python -m venv .venv
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+uvicorn pre_autorizacion.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Importante: **instalá el paquete en modo editable** (`pip install -e .`) antes de correr `uvicorn`. Si no, verás `ModuleNotFoundError: No module named 'pre_autorizacion'`. Usá siempre el `python` / `pip` del venv activado (no mezcles con un `uvicorn` instalado solo en el Python global).
 
 Abrí http://localhost:8000/docs para la OpenAPI generada.
 
@@ -65,7 +80,7 @@ UPLOADS_DIR=./var/uploads
 CORS_ORIGINS=http://localhost:4200
 ```
 
-> **Nota**: Phase B2 va a crear `config/settings.py` con Pydantic Settings que valida y tipa estas variables al arranque. Si falta una clave requerida, el server no levanta.
+> **Nota**: La configuración vive en `src/pre_autorizacion/config/settings.py` (Pydantic Settings). En `development` hay defaults para que la API arranque sin Notion ni claves de LLM; en `production` no podés dejar `JWT_SECRET` con el valor por defecto del ejemplo.
 
 ## Comandos
 

@@ -6,8 +6,10 @@
 - LLMProvider / VisionExtractor → DeepSeek / Gemini cuando hay api keys, y
   placeholders `_Null*` que fallan ruidosamente cuando no.
 
-Cada factory está cacheada con `lru_cache` keyed sobre el id del settings, así
-que durante toda la vida del proceso devuelve la misma instancia.
+Las factories singleton usan `lru_cache(maxsize=1)` **sin** pasar `Settings` como
+argumento (Pydantic `BaseSettings` no es hashable — rompería la caché). Quien
+necesita config llama a `get_settings()` dentro del cuerpo o usa el default
+`settings=None`.
 
 Las imports de adapters Notion/InMemory las resuelve el sub-agente B2D y los
 nombres aquí son los acordados (ver instrucciones del orquestador). Si un
@@ -288,12 +290,12 @@ def get_vision_extractor(settings: Settings | None = None) -> VisionExtractor:
 @lru_cache(maxsize=1)
 def get_text_extractor(settings: Settings | None = None) -> MedicalReportExtractor:
     """Extractor high-level para informes en TEXTO (compone `LLMProvider`)."""
-    s = settings or get_settings()
+    _ = settings or get_settings()
     from pre_autorizacion.features.authorization_cases.infrastructure.extractors.text_extractor import (  # noqa: PLC0415
         TextMedicalReportExtractor,
     )
 
-    return TextMedicalReportExtractor(get_llm_provider(s))
+    return TextMedicalReportExtractor(get_llm_provider())
 
 
 @lru_cache(maxsize=1)
@@ -304,9 +306,14 @@ def get_pdf_extractor(settings: Settings | None = None) -> MedicalReportExtracto
         PdfMedicalReportExtractor,
     )
 
+    try_structured_vision = bool(
+        str(s.google_api_key or "").strip() and s.vision_provider == "gemini"
+    )
     return PdfMedicalReportExtractor(
-        get_vision_extractor(s),
-        storage=get_file_storage(s),
+        get_vision_extractor(),
+        storage=get_file_storage(),
+        text_pipeline=get_text_extractor(),
+        try_structured_vision=try_structured_vision,
     )
 
 
@@ -319,7 +326,7 @@ def get_decision_maker(settings: Settings | None = None) -> AuthorizationDecisio
     )
 
     return LlmAuthorizationDecisionMaker(
-        get_llm_provider(s),
+        get_llm_provider(),
         model_name=s.text_model,
     )
 
@@ -332,7 +339,7 @@ def get_response_generator(settings: Settings | None = None) -> ResponseGenerato
         LlmResponseGenerator,
     )
 
-    return LlmResponseGenerator(get_llm_provider(s))
+    return LlmResponseGenerator(get_llm_provider())
 
 
 @lru_cache(maxsize=1)
@@ -369,9 +376,9 @@ def get_agent_orchestrator(settings: Settings | None = None) -> AgentOrchestrato
 
     return LangGraphAgentOrchestrator(
         graph=build_graph(),
-        extractor_text=get_text_extractor(s),
-        extractor_pdf=get_pdf_extractor(s),
-        decision_maker=get_decision_maker(s),
+        extractor_text=get_text_extractor(),
+        extractor_pdf=get_pdf_extractor(),
+        decision_maker=get_decision_maker(),
     )
 
 

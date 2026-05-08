@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Manual toggle: ThemeService pone class="dark" en <html>. Por defecto Tailwind v4 usa prefers-color-scheme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * Design tokens portados del prototipo (preatuomatizacion/styles.css)
  * Paleta: clinical & precise, neutrales cálidos, OKLCH para status colors.

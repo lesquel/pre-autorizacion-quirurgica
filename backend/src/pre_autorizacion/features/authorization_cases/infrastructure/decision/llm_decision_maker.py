@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, final
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pre_autorizacion.features.authorization_cases.domain.ports.authorization_decision_maker import (
     AuthorizationDecisionMaker,
@@ -46,31 +46,125 @@ SYSTEM_PROMPT: Final[str] = (
     "3. Si la carencia no se cumplió → ESCALATED con WAITING_PERIOD_NOT_MET.\n"
     "4. Si faltan documentos requeridos → DOCS_REQUESTED + lista en missing_docs.\n"
     "5. Tu rationale es para un auditor humano: técnico, conciso, en español.\n"
-    "6. Toda evidence debe ser una CITA TEXTUAL (sin parafrasear) del informe o "
-    "de la póliza/cobertura, etiquetada con su source.\n"
-    "7. Devolvé ÚNICAMENTE JSON válido cumpliendo el schema."
+    "6. Cada ítem en evidence debe tener source \"report\" o \"policy\" (minúsculas), "
+    "field (campo del dato, ej. procedure, coverage), quote (texto literal citado).\n"
+    "7. Incluí confidence entre 0 y 1 (ej. coherente con la extracción previa).\n"
+    "8. Si outcome=ESCALATED, escalation_reason DEBE ser exactamente uno de estos "
+    "strings en inglés (sin texto libre): WAITING_PERIOD_NOT_MET, "
+    "LOW_CONFIDENCE_PROCEDURE_MATCH, PDF_EXTRACTION_FAILURE, PROCEDURE_NOT_COVERED, "
+    "POLICY_INACTIVE, PROCEDURE_NOT_MATCHED, EXTRACTION_FAILED, LOW_CONFIDENCE, "
+    "UNEXPECTED_ERROR. Si no escalás, escalation_reason=null.\n"
+    "9. Devolvé ÚNICAMENTE JSON válido con esta forma exacta:\n"
+    '{"outcome":"APPROVED_AUTO|DOCS_REQUESTED|ESCALATED","rationale":"...",'
+    '"confidence":0.88,"evidence":[{"source":"policy","field":"coverage","quote":"..."}],'
+    '"missing_docs":[],"escalation_reason":null}'
 )
 
 
 class _EvidenceItemSchema(BaseModel):
-    """Item de evidencia que el LLM emite."""
+    """Item de evidencia que el LLM emite (acepta alias sueltos del modelo)."""
+
+    model_config = ConfigDict(extra="ignore")
 
     source: EvidenceSource = Field(
         description="'report' si la cita viene del informe; 'policy' si viene de póliza/cobertura."
     )
     field: str = Field(
-        description="Campo al que aplica la cita (ej: 'procedure', 'waiting_period', 'docs')."
+        default="summary",
+        description="Campo al que aplica la cita (ej: 'procedure', 'waiting_period', 'docs').",
     )
-    quote: str = Field(description="Cita textual literal.")
+    quote: str = Field(default="", description="Cita textual literal.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_evidence_shape(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        quote = out.get("quote") or out.get("text") or ""
+        q = str(quote).strip()
+        if q.lower() in ("none", "null", "n/a", "-"):
+            q = ""
+        out["quote"] = q or "(sin cita literal)"
+        raw_src = out.get("source", "")
+        if isinstance(raw_src, EvidenceSource):
+            out["source"] = raw_src.value
+            if not str(out.get("field") or "").strip():
+                out["field"] = "summary"
+            return out
+        if isinstance(raw_src, str):
+            low = raw_src.strip().lower()
+            if low in ("report", "policy"):
+                out["source"] = low
+            elif any(
+                tok in low
+                for tok in (
+                    "cobertura",
+                    "póliza",
+                    "poliza",
+                    "coverage",
+                    "plan",
+                    "carencia",
+                    "copago",
+                )
+            ):
+                out["source"] = EvidenceSource.POLICY.value
+            else:
+                out["source"] = EvidenceSource.REPORT.value
+        else:
+            out["source"] = EvidenceSource.REPORT.value
+        if not str(out.get("field") or "").strip():
+            out["field"] = "summary"
+        return out
+
+
+def _coerce_escalation_reason_value(raw: object, *, outcome_is_escalated: bool) -> str | None:
+    """Mapea texto libre del LLM (o null) al enum wire `EscalationReason`."""
+    if not outcome_is_escalated:
+        return None
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return EscalationReason.EXTRACTION_FAILED.value
+    if isinstance(raw, EscalationReason):
+        return raw.value
+    if not isinstance(raw, str):
+        return EscalationReason.UNEXPECTED_ERROR.value
+    s = raw.strip()
+    upper = s.upper().replace(" ", "_")
+    for m in EscalationReason:
+        if s == m.value or upper == m.value:
+            return m.value
+    low = s.lower()
+    if "carencia" in low or "waiting" in low or "espera" in low:
+        return EscalationReason.WAITING_PERIOD_NOT_MET.value
+    if "extracc" in low or "identificar" in low or "revisión manual" in low or "revision manual" in low:
+        return EscalationReason.EXTRACTION_FAILED.value
+    if "pdf" in low and ("ilegib" in low or "corrupt" in low or "no legible" in low):
+        return EscalationReason.PDF_EXTRACTION_FAILURE.value
+    if "confianza" in low or "low confidence" in low or "procedure match" in low:
+        return EscalationReason.LOW_CONFIDENCE_PROCEDURE_MATCH.value
+    if "cubierto" in low or "not covered" in low or "sin cobertura" in low:
+        return EscalationReason.PROCEDURE_NOT_COVERED.value
+    if "inactiv" in low or "venc" in low or "poliza" in low or "póliza" in low:
+        return EscalationReason.POLICY_INACTIVE.value
+    if "match" in low or "coincid" in low or "matche" in low:
+        return EscalationReason.PROCEDURE_NOT_MATCHED.value
+    if "confianza global" in low or "baja confianza" in low:
+        return EscalationReason.LOW_CONFIDENCE.value
+    return EscalationReason.UNEXPECTED_ERROR.value
 
 
 class _DecisionSchema(BaseModel):
     """Schema interno con el shape de `AgentDecision` (sin decided_by/model_used)."""
 
+    model_config = ConfigDict(extra="ignore")
+
     outcome: Outcome = Field(description="Resultado: APPROVED_AUTO, DOCS_REQUESTED o ESCALATED.")
     rationale: str = Field(description="Razonamiento técnico-clínico para auditor.")
     confidence: float = Field(
-        ge=0.0, le=1.0, description="Confianza global de la decisión [0.0, 1.0]."
+        default=0.82,
+        ge=0.0,
+        le=1.0,
+        description="Confianza global de la decisión [0.0, 1.0].",
     )
     evidence: list[_EvidenceItemSchema] = Field(
         default_factory=list,
@@ -84,6 +178,23 @@ class _DecisionSchema(BaseModel):
         default=None,
         description="Razón del escalamiento; obligatoria cuando outcome=ESCALATED.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_escalation_reason(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        raw_outcome = out.get("outcome", "")
+        if isinstance(raw_outcome, Outcome):
+            escalated = raw_outcome is Outcome.ESCALATED
+        else:
+            escalated = str(raw_outcome).strip().upper() in ("ESCALATED", Outcome.ESCALATED.value)
+        out["escalation_reason"] = _coerce_escalation_reason_value(
+            out.get("escalation_reason"),
+            outcome_is_escalated=escalated,
+        )
+        return out
 
 
 @final
@@ -159,7 +270,7 @@ class LlmAuthorizationDecisionMaker(AuthorizationDecisionMaker):
             "── COBERTURA APLICABLE ──\n"
             f"id: {getattr(coverage, 'id', None)}\n"
             f"cubierto: {getattr(coverage, 'covered', None)}\n"
-            f"carencia (días): {getattr(coverage, 'waiting_period_days', None)}\n"
+            f"carencia (días): {getattr(coverage, 'waiting_days', None)}\n"
             f"copago: {getattr(coverage, 'copay', None)}\n"
             f"docs requeridos: {list(getattr(coverage, 'required_docs', ()))}\n\n"
             "── ANÁLISIS DETERMINÍSTICO PREVIO (rule engine) ──\n"
