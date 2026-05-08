@@ -25,6 +25,16 @@ export class InMemoryCaseRepository extends CaseRepository {
 
   override readonly cases = this._cases.asReadonly();
 
+  /**
+   * No-op por construcción: el adapter en memoria ya tiene la lista
+   * sembrada en el signal, no hay un origen externo que recargar. El
+   * contrato del port pide `loadAll` para que adapters HTTP puedan
+   * refrescar tras un POST sin castear a la clase concreta (LSP).
+   */
+  override loadAll(): Promise<void> {
+    return Promise.resolve();
+  }
+
   override listSnapshot(): readonly AuthorizationCase[] {
     return this._cases();
   }

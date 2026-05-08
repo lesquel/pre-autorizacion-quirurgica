@@ -10,6 +10,7 @@ import type { TraceStep } from '../../domain/value-objects/trace-step';
 import { CaseRepository } from '../../domain/ports/case-repository.port';
 
 type CaseDto = components['schemas']['CaseOut'];
+type CaseTraceOut = components['schemas']['CaseTraceOut'];
 
 @Injectable({ providedIn: 'root' })
 export class HttpCaseRepository extends CaseRepository {
@@ -18,7 +19,7 @@ export class HttpCaseRepository extends CaseRepository {
   private readonly _cases = signal<readonly AuthorizationCase[]>([]);
   override readonly cases = this._cases.asReadonly();
 
-  async loadAll(): Promise<void> {
+  override async loadAll(): Promise<void> {
     const dtos = await firstValueFrom(
       this.http.get<CaseDto[]>(`${this.base}/api/v1/cases`),
     );
@@ -51,10 +52,13 @@ export class HttpCaseRepository extends CaseRepository {
    */
   override async loadTrace(id: string): Promise<readonly TraceStep[]> {
     const body = await firstValueFrom(
-      this.http.get<{ trace: unknown[] }>(
+      this.http.get<CaseTraceOut>(
         `${this.base}/api/v1/cases/${encodeURIComponent(id)}/trace`,
       ),
     );
-    return body.trace.map((s) => traceStepFromDto(s as never));
+    // Defensive: backend SHOULD always return `trace: []` cuando no hay pasos,
+    // pero si por algún edge case (proxy, cache stale) llega null/undefined,
+    // evitamos el crash de `.map()` sobre nada.
+    return (body.trace ?? []).map((s) => traceStepFromDto(s));
   }
 }

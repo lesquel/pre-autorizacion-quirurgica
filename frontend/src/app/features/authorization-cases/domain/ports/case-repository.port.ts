@@ -24,6 +24,16 @@ export abstract class CaseRepository {
   /** Reactive signal con todos los casos. */
   abstract readonly cases: Signal<readonly AuthorizationCase[]>;
 
+  /**
+   * Refresca el listado completo desde el backend (o el origen del adapter).
+   *
+   * Las implementaciones in-memory pueden hacerlo no-op; el contrato existe
+   * para que los call-sites (ej. agentes que crean un caso vía POST y luego
+   * quieren ver la lista actualizada cross-roles) puedan invocarlo sin
+   * castear a la implementación concreta — eso violaba LSP.
+   */
+  abstract loadAll(): Promise<void>;
+
   /** Snapshot sincrónico. */
   abstract listSnapshot(): readonly AuthorizationCase[];
 
