@@ -8,7 +8,7 @@ import { errorInterceptor } from './shared/api/interceptors/error.interceptor';
 import { AuthRepository } from './features/auth/domain/ports/auth-repository.port';
 import { TokenStore } from './features/auth/domain/ports/token-store.port';
 import { HttpAuthRepository } from './features/auth/infrastructure/repos/http-auth.repository';
-import { InMemoryTokenStore } from './features/auth/infrastructure/stores/in-memory-token.store';
+import { SessionStorageTokenStore } from './features/auth/infrastructure/stores/session-storage-token.store';
 import { AgentOrchestrator } from './features/authorization-cases/domain/ports/agent-orchestrator.port';
 import { CaseRepository } from './features/authorization-cases/domain/ports/case-repository.port';
 import { HttpAgentAdapter } from './features/authorization-cases/infrastructure/agents/http-agent.adapter';
@@ -28,7 +28,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withFetch(), withInterceptors([authInterceptor, errorInterceptor])),
     { provide: AuthRepository, useClass: HttpAuthRepository },
-    { provide: TokenStore, useClass: InMemoryTokenStore },
+    { provide: TokenStore, useClass: SessionStorageTokenStore },
     { provide: CaseRepository, useClass: HttpCaseRepository },
     { provide: AgentOrchestrator, useClass: HttpAgentAdapter },
     { provide: PolicyRepository, useClass: HttpPolicyRepository },
