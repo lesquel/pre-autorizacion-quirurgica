@@ -41,8 +41,15 @@ export class HttpCaseRepository extends CaseRepository {
     this._cases.update((arr) => arr.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
 
-  /** Extra: fetch the trace steps for a case (used by the agent adapter). */
-  async getTrace(id: string): Promise<readonly TraceStep[]> {
+  /**
+   * Fetches the persisted terminal trace for a case via `/cases/{id}/trace`.
+   *
+   * Used by:
+   * - `HttpAgentAdapter` after submit, to stream the steps with timing.
+   * - `AuditorCaseDetailPage`, to populate the trace viewer on demand
+   *   (the case list payload omits `agentTrace` to keep responses small).
+   */
+  override async loadTrace(id: string): Promise<readonly TraceStep[]> {
     const body = await firstValueFrom(
       this.http.get<{ trace: unknown[] }>(
         `${this.base}/api/v1/cases/${encodeURIComponent(id)}/trace`,

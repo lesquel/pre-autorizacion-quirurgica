@@ -3,6 +3,7 @@ import { Injectable, signal } from '@angular/core';
 import { INITIAL_CASES } from '../../../../shared/fixtures/initial-cases';
 import type { AuthorizationCase } from '../../domain/entities/authorization-case';
 import { CaseRepository } from '../../domain/ports/case-repository.port';
+import type { TraceStep } from '../../domain/value-objects/trace-step';
 
 /**
  * InMemoryCaseRepository — adapter en memoria para el `CaseRepository`.
@@ -40,5 +41,13 @@ export class InMemoryCaseRepository extends CaseRepository {
     this._cases.update((arr) =>
       arr.map((c) => (c.id === id ? { ...c, ...patch } : c)),
     );
+  }
+
+  /**
+   * En memoria la traza ya viaja embebida en `AuthorizationCase.agentTrace`,
+   * así que devolvemos eso. Mantiene el contrato del port sin pegar a HTTP.
+   */
+  override async loadTrace(caseId: string): Promise<readonly TraceStep[]> {
+    return this.findById(caseId)?.agentTrace ?? [];
   }
 }

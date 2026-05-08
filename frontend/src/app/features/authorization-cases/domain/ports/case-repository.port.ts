@@ -1,6 +1,7 @@
 import type { Signal } from '@angular/core';
 
 import type { AuthorizationCase } from '../entities/authorization-case';
+import type { TraceStep } from '../value-objects/trace-step';
 
 /**
  * CaseRepository — port del repositorio de casos de autorización.
@@ -34,4 +35,13 @@ export abstract class CaseRepository {
 
   /** Actualiza inmutablemente el caso `id` con `patch`. No-op si no existe. */
   abstract update(id: string, patch: Partial<AuthorizationCase>): void;
+
+  /**
+   * Carga la traza terminal del agente para un caso.
+   *
+   * El backend expone `/cases/{id}/trace` por separado del `CaseOut` para
+   * evitar payloads gigantes en listados — la UI llama esto bajo demanda
+   * cuando necesita mostrar el trace (detalle del caso).
+   */
+  abstract loadTrace(caseId: string): Promise<readonly TraceStep[]>;
 }

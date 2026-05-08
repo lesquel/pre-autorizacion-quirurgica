@@ -18,6 +18,8 @@ import {
 import { SEED, type DemoCase } from '../../../../../../shared/fixtures';
 import { OutcomePill } from '../../../../../../shared/ui';
 import { AuthorizationCasesFacade } from '../../../../application/facades/authorization-cases.facade';
+import { CaseRepository } from '../../../../domain/ports/case-repository.port';
+import type { TraceStep } from '../../../../domain/value-objects/trace-step';
 import { AgentTraceViewer, DecisionPanel } from '../../../components';
 
 type ResolutionOutcome = 'APPROVED' | 'REJECTED';
@@ -132,7 +134,7 @@ type ResolutionOutcome = 'APPROVED' | 'REJECTED';
 
           <!-- DERECHA: trace + decision -->
           <div class="flex flex-col gap-4">
-            <app-agent-trace-viewer [trace]="c.agentTrace" />
+            <app-agent-trace-viewer [trace]="traceSteps()" />
             @if (c.decision; as d) {
               <app-decision-panel [decision]="d" />
             }
@@ -259,6 +261,7 @@ type ResolutionOutcome = 'APPROVED' | 'REJECTED';
 })
 export class AuditorCaseDetailPage {
   private readonly facade = inject(AuthorizationCasesFacade);
+  private readonly caseRepository = inject(CaseRepository);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -341,16 +344,44 @@ export class AuditorCaseDetailPage {
       this.reasoning().trim().length > 0,
   );
 
+  /**
+   * Pasos de la traza del agente para el caso actual.
+   *
+   * El listado de casos del backend NO trae `agentTrace` (payload chico),
+   * así que lo pedimos por separado a `/cases/{id}/trace` cuando el id
+   * del route cambia. Si la llamada falla dejamos el array vacío y el
+   * `<app-agent-trace-viewer>` muestra su empty state.
+   */
+  protected readonly traceSteps = signal<readonly TraceStep[]>([]);
+
   constructor() {
     // Sincroniza la selección con el id del route param.
     effect(() => {
       const id = this.caseId();
       if (id) {
         this.facade.selectCase(id);
+        // No await — el effect es síncrono; cargamos el trace en background
+        // y el signal se actualiza cuando llega la respuesta. Reset previo
+        // para evitar mostrar el trace de un caso anterior durante la espera.
+        this.traceSteps.set([]);
+        void this.loadTraceFor(id);
       } else {
         this.facade.clearSelection();
+        this.traceSteps.set([]);
       }
     });
+  }
+
+  private async loadTraceFor(id: string): Promise<void> {
+    try {
+      const trace = await this.caseRepository.loadTrace(id);
+      // Si el id cambió mientras cargábamos (navegación rápida), descartamos.
+      if (this.caseId() !== id) return;
+      this.traceSteps.set(trace);
+    } catch {
+      // Empty state ("Esperando primer paso del agente…") cubre el fallo.
+      if (this.caseId() === id) this.traceSteps.set([]);
+    }
   }
 
   protected setOutcome(value: ResolutionOutcome): void {
