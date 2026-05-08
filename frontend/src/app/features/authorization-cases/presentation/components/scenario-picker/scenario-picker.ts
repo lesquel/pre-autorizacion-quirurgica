@@ -24,7 +24,7 @@ export interface DemoScenario {
   readonly patientId: string;
   readonly policyNumber: string;
   readonly procedureCode: string;
-  readonly format: 'TEXT' | 'PDF';
+  readonly format: 'text' | 'pdf';
   readonly report: string;
   readonly attachedDocs: readonly string[];
 }

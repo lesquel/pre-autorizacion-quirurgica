@@ -231,8 +231,10 @@ const COVERAGES: readonly Coverage[] = [
  * DemoCase — escenario pre-cargado del prototipo (formato del agente, no del dominio).
  * Se mantiene tal cual para que la UI / mock del agente lo consuma directamente.
  *
- * `format`: 'TEXT' | 'PDF' (uppercase tal como en data.js — el dominio normaliza
- * a 'text' | 'pdf' al construir un MedicalReport real).
+ * `format`: 'text' | 'pdf' (lowercase, alineado con `ReportFormat` del backend
+ * y con el discriminator que viaja por la API). Antes era uppercase ('TEXT' /
+ * 'PDF') heredado de data.js, lo que obligaba a normalizar en cada call-site
+ * (`s.format === 'PDF' ? 'pdf' : 'text'`) y era propenso a bugs de comparación.
  */
 export interface DemoCase {
   readonly label: string;
@@ -241,7 +243,7 @@ export interface DemoCase {
   readonly procedureCode: string;
   readonly report: string;
   readonly attachedDocs: readonly string[];
-  readonly format: 'TEXT' | 'PDF';
+  readonly format: 'text' | 'pdf';
 }
 
 export type DemoScenarioKey =
@@ -284,7 +286,7 @@ Dr. R. Salgado · Cirugía General · MP 18472`,
       'Laboratorio prequirúrgico',
       'Riesgo cardiológico',
     ],
-    format: 'TEXT',
+    format: 'text',
   },
   DOCS_REQUESTED: {
     label: 'Documentos faltantes',
@@ -313,7 +315,7 @@ DOCUMENTACIÓN ADJUNTA
 
 Dr. M. Andrade · Urología · MP 9821`,
     attachedDocs: ['Informe urológico', 'PSA', 'Riesgo cardiológico'],
-    format: 'TEXT',
+    format: 'text',
   },
   ESCALATED_WAITING: {
     label: 'Escalado — carencia incumplida',
@@ -350,7 +352,7 @@ Dr. P. Chávez · Traumatología · MP 14211`,
       'Riesgo cardiológico',
       'Riesgo anestésico',
     ],
-    format: 'TEXT',
+    format: 'text',
   },
   ESCALATED_LOW_CONF: {
     label: 'Escalado — baja confianza en match',
@@ -371,7 +373,7 @@ y eventual apendicectomía.
 
 Dra. L. Toro · Emergencia · MP 22094`,
     attachedDocs: ['Informe de urgencia', 'Laboratorio prequirúrgico'],
-    format: 'TEXT',
+    format: 'text',
   },
   ESCALATED_PDF_FAIL: {
     label: 'Escalado — falla de extracción PDF',
@@ -380,7 +382,7 @@ Dra. L. Toro · Emergencia · MP 22094`,
     procedureCode: 'I83.90',
     report: '[informe-vascular-escaneado.pdf · 4.2 MB · 6 páginas]',
     attachedDocs: ['Informe vascular', 'Eco-doppler venoso', 'Riesgo cardiológico'],
-    format: 'PDF',
+    format: 'pdf',
   },
 } as const;
 

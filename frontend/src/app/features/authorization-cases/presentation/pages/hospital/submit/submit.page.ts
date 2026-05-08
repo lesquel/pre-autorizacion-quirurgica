@@ -231,7 +231,9 @@ export class HospitalSubmitPage {
     this.prefill.set({
       patientId: s.patientId,
       policyNumber: s.policyNumber,
-      format: s.format === 'PDF' ? 'pdf' : 'text',
+      // `s.format` ya viene en lowercase ('text' | 'pdf'), alineado con
+      // ReportFormat del backend — sin necesidad de normalizar acá.
+      format: s.format,
       content: s.report,
       procedureSolicitedHint: s.procedureCode === '?' ? undefined : s.procedureCode,
       medicalPdfFile: null,
