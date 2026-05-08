@@ -70,6 +70,18 @@ def _register_feature_routers(app: FastAPI) -> None:
             note="procedures router not yet wired.",
         )
 
+    try:
+        from pre_autorizacion.features.patients.api.routers import (  # noqa: PLC0415
+            router as patients_router,
+        )
+        app.include_router(patients_router)
+    except ImportError as exc:
+        _logger.warning(
+            "router.patients.unavailable",
+            reason=str(exc),
+            note="patients router not yet wired.",
+        )
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Construye la app FastAPI. Punto único de configuración."""

@@ -26,6 +26,7 @@ from pre_autorizacion.config.di import (
     get_insurer_repository,
     get_jwt_service,
     get_llm_provider,
+    get_patient_repository,
     get_policy_repository,
     get_procedure_repository,
     get_user_repository,
@@ -44,6 +45,7 @@ from pre_autorizacion.features.policies.domain.ports.insurer_repository import I
 from pre_autorizacion.features.policies.domain.ports.policy_repository import PolicyRepository
 from pre_autorizacion.features.procedures.domain.ports import ProcedureRepository
 from pre_autorizacion.shared.domain.errors import AuthError, ForbiddenError
+from pre_autorizacion.shared.domain.ports import PatientRepository
 from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
 from pre_autorizacion.shared.storage.ports.file_storage import FileStorage
 from pre_autorizacion.shared.vision.ports.vision_extractor import VisionExtractor
@@ -78,6 +80,10 @@ def _get_procedure_repository() -> ProcedureRepository:
     return get_procedure_repository()
 
 
+def _get_patient_repository() -> PatientRepository:
+    return get_patient_repository()
+
+
 def _get_coverage_repository() -> CoverageRepository:
     return get_coverage_repository()
 
@@ -104,6 +110,7 @@ UserRepositoryDep = Annotated[UserRepository, Depends(_get_user_repository)]
 CaseRepositoryDep = Annotated[CaseRepository, Depends(_get_case_repository)]
 PolicyRepositoryDep = Annotated[PolicyRepository, Depends(_get_policy_repository)]
 ProcedureRepositoryDep = Annotated[ProcedureRepository, Depends(_get_procedure_repository)]
+PatientRepositoryDep = Annotated[PatientRepository, Depends(_get_patient_repository)]
 CoverageRepositoryDep = Annotated[CoverageRepository, Depends(_get_coverage_repository)]
 InsurerRepositoryDep = Annotated[InsurerRepository, Depends(_get_insurer_repository)]
 FileStorageDep = Annotated[FileStorage, Depends(_get_file_storage)]
@@ -164,6 +171,7 @@ __all__ = [
     "InsurerRepositoryDep",
     "JwtServiceDep",
     "LLMProviderDep",
+    "PatientRepositoryDep",
     "PolicyRepositoryDep",
     "ProcedureRepositoryDep",
     "SettingsDep",
