@@ -19,9 +19,10 @@ from pre_autorizacion.main import create_app
 
 _ENV_VARS_TO_CLEAR = (
     "NOTION_TOKEN",
-    "NOTION_DB_PATIENTS",
+    # NOTION_DB_PATIENTS y NOTION_DB_PROCEDURES removidas en issue #4 (no
+    # tenían repo ni factory consumiéndolas). Si en post-v1 se implementan
+    # los adapters Notion correspondientes, volver a agregarlas acá.
     "NOTION_DB_INSURERS",
-    "NOTION_DB_PROCEDURES",
     "NOTION_DB_POLICIES",
     "NOTION_DB_COVERAGES",
     "NOTION_DB_MEDICAL_REPORTS",

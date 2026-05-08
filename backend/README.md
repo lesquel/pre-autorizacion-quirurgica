@@ -63,11 +63,9 @@ GOOGLE_API_KEY=
 CONFIDENCE_THRESHOLD=0.80
 PROCEDURE_MATCH_THRESHOLD=0.85
 
-# ─── Notion (persistencia primaria, 7 DBs) ───
+# ─── Notion (persistencia — ver tabla "Notion DB ↔ backend" más abajo) ───
 NOTION_TOKEN=
-NOTION_DB_PATIENTS=
 NOTION_DB_INSURERS=
-NOTION_DB_PROCEDURES=
 NOTION_DB_POLICIES=
 NOTION_DB_COVERAGES=
 NOTION_DB_MEDICAL_REPORTS=
@@ -81,6 +79,24 @@ CORS_ORIGINS=http://localhost:4200
 ```
 
 > **Nota**: La configuración vive en `src/pre_autorizacion/config/settings.py` (Pydantic Settings). En `development` hay defaults para que la API arranque sin Notion ni claves de LLM; en `production` no podés dejar `JWT_SECRET` con el valor por defecto del ejemplo.
+
+## Notion DB ↔ backend (matriz de integración)
+
+Ground-truth de qué DBs Notion están realmente conectadas hoy. El PRD §4.2.2 declara 7 DBs; la implementación v1 usa 5. Las otras 2 quedan **post-v1** (aclarado en issue #4).
+
+| # | DB Notion (PRD) | Env var | Backend | Modo |
+|---|---|---|---|---|
+| 1 | **Pacientes** | _(removida)_ | InMemory (fixtures) | ❌ Sin Notion en v1 — no hay repo. |
+| 2 | **Aseguradoras** | `NOTION_DB_INSURERS` | `NotionInsurerRepository` o InMemory fallback | 📖 Solo lectura (sin `create`). Si la var está vacía, usa InMemory. |
+| 3 | **Procedimientos** | _(removida)_ | InMemory (catálogo CIE-10) | ❌ Sin Notion en v1 — TODO post-v1 implementar adapter. |
+| 4 | **Pólizas** | `NOTION_DB_POLICIES` | `NotionPolicyRepository` o InMemory fallback | ✏️ Lectura + creación (CRUD parcial). |
+| 5 | **Coberturas** | `NOTION_DB_COVERAGES` | `NotionCoverageRepository` o InMemory fallback | 📖 Solo lectura. |
+| 6 | **Informes médicos** | `NOTION_DB_MEDICAL_REPORTS` | `NotionCaseRepository` (lookup) | 🔗 Solo lookup por `Identificador` desde el flujo de Casos — **no** hay CRUD del informe en sí. |
+| 7 | **Casos autorización** | `NOTION_DB_AUTHORIZATION_CASES` | `NotionCaseRepository` | ✏️ Lectura + creación + update. |
+
+**Reglas de DI**: si `NOTION_TOKEN` está vacío → todos los repos caen a InMemory (demo offline). Si está set, cada DB se usa solo si su `NOTION_DB_*` específica también está set; si no, esa pieza concreta usa InMemory aunque las otras sí vayan a Notion.
+
+**Para el operador**: cargar pacientes, procedimientos o aseguradoras directamente en Notion **no se refleja en la app** en v1 — los datos para esas 3 entities salen de las fixtures sintéticas en código (`shared/fixtures/seed.py`). Si las necesitás dinámicas, abrí un issue para implementar los adapters Notion correspondientes.
 
 ## Comandos
 

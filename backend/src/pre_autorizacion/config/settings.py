@@ -70,10 +70,14 @@ class Settings(BaseSettings):
     procedure_match_threshold: float = 0.85
 
     # ── Notion ───────────────────────────────────────────────────────────
+    # Solo se declaran las DBs que el backend USA hoy. `NOTION_DB_PATIENTS` y
+    # `NOTION_DB_PROCEDURES` fueron removidas (issue #4): no había repo Notion
+    # ni factory en DI consumiéndolas — se cuelan en Settings era "config
+    # fantasma" para el operador. Si en post-v1 se implementan, volver a
+    # declararlas acá. `extra="ignore"` (model_config) permite que `.env`
+    # tenga vars desconocidas sin romper la app.
     notion_token: str = ""
-    notion_db_patients: str = ""
     notion_db_insurers: str = ""
-    notion_db_procedures: str = ""
     notion_db_policies: str = ""
     notion_db_coverages: str = ""
     notion_db_medical_reports: str = ""
