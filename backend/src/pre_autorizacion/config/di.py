@@ -45,6 +45,7 @@ from pre_autorizacion.features.policies.domain.ports.coverage_repository import 
 from pre_autorizacion.features.procedures.domain.ports import ProcedureRepository
 from pre_autorizacion.features.policies.domain.ports.insurer_repository import InsurerRepository
 from pre_autorizacion.features.policies.domain.ports.policy_repository import PolicyRepository
+from pre_autorizacion.shared.domain.ports import PatientRepository
 from pre_autorizacion.shared.llm.ports.llm_provider import LLMProvider
 from pre_autorizacion.shared.storage.ports.file_storage import FileStorage
 from pre_autorizacion.shared.vision.ports.vision_extractor import VisionExtractor
@@ -236,12 +237,40 @@ def get_case_repository(settings: Settings | None = None) -> CaseRepository:
 
 
 @lru_cache(maxsize=1)
+def get_patient_repository(settings: Settings | None = None) -> PatientRepository:
+    """Notion si hay token + db id; in-memory en otro caso."""
+    s = settings or get_settings()
+    if s.use_notion and s.notion_db_patients:
+        from pre_autorizacion.shared.infrastructure.repos.notion_patient import (  # noqa: PLC0415
+            NotionPatientRepository,
+        )
+        from pre_autorizacion.shared.notion.client import NotionClient  # noqa: PLC0415
+
+        return NotionPatientRepository(NotionClient(s.notion_token), s.notion_db_patients)
+
+    from pre_autorizacion.shared.infrastructure.repos.in_memory_patient import (  # noqa: PLC0415
+        InMemoryPatientRepository,
+    )
+
+    return InMemoryPatientRepository()
+
+
+@lru_cache(maxsize=1)
 def get_procedure_repository(settings: Settings | None = None) -> ProcedureRepository:
-    """Procedure catalog — in-memory in v1 (Notion adapter is post-v1)."""
-    _ = settings or get_settings()
-    from pre_autorizacion.features.procedures.infrastructure.repos import (  # noqa: PLC0415
+    """Notion si hay token + db id; in-memory en otro caso."""
+    s = settings or get_settings()
+    if s.use_notion and s.notion_db_procedures:
+        from pre_autorizacion.features.procedures.infrastructure.repos.notion_procedure import (  # noqa: PLC0415
+            NotionProcedureRepository,
+        )
+        from pre_autorizacion.shared.notion.client import NotionClient  # noqa: PLC0415
+
+        return NotionProcedureRepository(NotionClient(s.notion_token), s.notion_db_procedures)
+
+    from pre_autorizacion.features.procedures.infrastructure.repos.in_memory_procedure import (  # noqa: PLC0415
         InMemoryProcedureRepository,
     )
+
     return InMemoryProcedureRepository()
 
 
@@ -395,6 +424,7 @@ def reset_container() -> None:
     get_vision_extractor.cache_clear()
     get_text_extractor.cache_clear()
     get_pdf_extractor.cache_clear()
+    get_patient_repository.cache_clear()
     get_procedure_repository.cache_clear()
     get_decision_maker.cache_clear()
     get_response_generator.cache_clear()
@@ -410,6 +440,7 @@ __all__ = [
     "get_insurer_repository",
     "get_jwt_service",
     "get_llm_provider",
+    "get_patient_repository",
     "get_pdf_extractor",
     "get_policy_repository",
     "get_procedure_repository",
