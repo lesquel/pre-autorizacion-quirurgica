@@ -4,7 +4,12 @@
 # Usamos la imagen oficial de Astral con uv pre-instalado para evitar el
 # overhead de instalar uv vía pip/cargo en cada build. La imagen base es
 # python:3.13-bookworm-slim — el uv lock ya pinea requires-python>=3.12.
-FROM ghcr.io/astral-sh/uv:0.10-python3.13-bookworm-slim AS builder
+#
+# Nota: Astral NO publica tags compuestos del tipo `<uv-version>-<python>-<distro>`,
+# solo publican `<uv-version>` solo o `<python>-<distro>` solo (rolling con
+# último uv estable). Usamos el rolling de python3.13 — el uv.lock pinea
+# todas las deps así que un bump menor de uv no rompe builds.
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
 # Optimizaciones uv:
 # - UV_COMPILE_BYTECODE=1 → precompila .pyc al instalar (reduce cold-start).
