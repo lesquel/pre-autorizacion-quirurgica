@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # ── Auth (JWT) ───────────────────────────────────────────────────────
     jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
+    # `iss` / `aud` evitan replay cross-service cuando varios deployments
+    # comparten el mismo secret (típico cuando todos heredan el default).
+    # PyJWT silencia el check si los claims no están en el token + no se
+    # piden en `decode()`, así que tenemos que forzarlos en ambos lados.
+    jwt_issuer: str = "pre-autorizacion-quirurgica"
+    jwt_audience: str = "pre-autorizacion-api"
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 7
 

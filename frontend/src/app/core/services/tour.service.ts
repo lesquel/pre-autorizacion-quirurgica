@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { driver, type Driver, type DriveStep } from 'driver.js';
+import type { Driver, DriveStep } from 'driver.js';
 
 import { RoleService } from './role.service';
 import type { Role } from '../types/role';
@@ -129,6 +129,20 @@ export class TourService {
   private readonly roleService = inject(RoleService);
   private instance: Driver | null = null;
 
+  /**
+   * Flag de aborto: cuando el usuario cierra el tour mid-flight, las
+   * navegaciones / role switches encoladas en `alignToStep` deben cortarse
+   * para no cambiar el rol o la ruta DESPUÉS de cerrar el tour.
+   */
+  private aborted = false;
+
+  /**
+   * Cache del módulo driver.js. Se carga lazy la primera vez que se llama
+   * a `start()` para que el bundle inicial no incluya driver.js (~20 KB
+   * gzipped) — la mayoría de los usuarios no abre el tour.
+   */
+  private driverModule: typeof import('driver.js') | null = null;
+
   /** Signal pública para que la UI pueda reaccionar (por ejemplo, deshabilitar botones). */
   readonly active = signal(false);
 
@@ -145,12 +159,18 @@ export class TourService {
   /** Lanza el tour completo. Idempotente: si ya está activo, no hace nada. */
   async start(): Promise<void> {
     if (this.instance !== null) return;
-
+    this.aborted = false;
     this.active.set(true);
 
-    // Pre-posicionarse en el primer paso útil (rol+ruta del paso 2).
-    // El paso 0 es modal sin elemento; los siguientes definen su propio
-    // estado vía `onHighlightStarted`.
+    // Lazy load: driver.js solo se descarga cuando el usuario abre el tour
+    // por primera vez (issue H2 del adversarial review).
+    const { driver } = await this.loadDriver();
+    if (this.aborted) {
+      // El usuario cerró antes de que terminara la descarga — desistimos.
+      this.active.set(false);
+      return;
+    }
+
     const steps = this.buildDriveSteps();
 
     this.instance = driver({
@@ -175,6 +195,9 @@ export class TourService {
 
   /** Cierra el tour si está activo. */
   end(): void {
+    // Marcamos abort ANTES de destroy para que cualquier alignToStep
+    // mid-flight chequee la bandera y no siga navegando.
+    this.aborted = true;
     this.instance?.destroy();
   }
 
@@ -189,6 +212,13 @@ export class TourService {
   }
 
   // ─── Internals ───────────────────────────────────────────────────────
+
+  private async loadDriver(): Promise<typeof import('driver.js')> {
+    if (this.driverModule === null) {
+      this.driverModule = await import('driver.js');
+    }
+    return this.driverModule;
+  }
 
   private buildDriveSteps(): DriveStep[] {
     return TOUR_STEPS.map((cfg) => {
@@ -216,14 +246,19 @@ export class TourService {
 
   /**
    * Asegura que el rol y la ruta correspondan al step antes del highlight.
-   * Es best-effort: si la navegación tarda más que `settleMs`, el popover
+   * Best-effort: si la navegación tarda más que `settleMs`, el popover
    * puede aparecer brevemente sobre el elemento equivocado y luego
    * reposicionarse cuando el DOM se actualiza.
+   *
+   * Chequea `aborted` en cada hop para cortar si el usuario cerró el tour
+   * mientras esto seguía corriendo (issue H_C4).
    */
   private async alignToStep(cfg: TourStepConfig): Promise<void> {
+    if (this.aborted) return;
     if (cfg.role !== undefined && this.roleService.role() !== cfg.role) {
       this.roleService.set(cfg.role);
     }
+    if (this.aborted) return;
     if (cfg.route !== undefined && !this.router.url.startsWith(cfg.route)) {
       try {
         await this.router.navigate([cfg.route]);
@@ -232,6 +267,7 @@ export class TourService {
         // selector destino — si no está, driver.js lo skipea silenciosamente.
       }
     }
+    if (this.aborted) return;
     if (cfg.element !== undefined) {
       await this.waitForElement(cfg.element, cfg.settleMs ?? 0);
     } else if (cfg.settleMs !== undefined) {
@@ -243,6 +279,8 @@ export class TourService {
    * Polling corto buscando un elemento por selector. Útil tras router.navigate
    * con lazy load: el componente todavía no existe en el DOM cuando el
    * Promise de navigate resuelve.
+   *
+   * Sale temprano si `aborted` es true (issue H_C4).
    */
   private async waitForElement(
     selector: string,
@@ -252,6 +290,7 @@ export class TourService {
     if (typeof document === 'undefined') return;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
+      if (this.aborted) return;
       if (document.querySelector(selector) !== null) {
         if (extraSettleMs > 0) await this.delay(extraSettleMs);
         return;

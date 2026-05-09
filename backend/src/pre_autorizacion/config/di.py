@@ -132,13 +132,15 @@ def get_user_repository(settings: Settings | None = None) -> UserRepository:
 
 @lru_cache(maxsize=1)
 def get_jwt_service(settings: Settings | None = None) -> JwtService:
-    """JwtService configurado con el secret + TTLs de Settings."""
+    """JwtService configurado con el secret + TTLs + issuer/audience de Settings."""
     s = settings or get_settings()
     return JwtService(
         secret=s.jwt_secret,
         algorithm=s.jwt_algorithm,
         access_ttl_minutes=s.access_token_ttl_minutes,
         refresh_ttl_days=s.refresh_token_ttl_days,
+        issuer=s.jwt_issuer,
+        audience=s.jwt_audience,
     )
 
 
@@ -412,7 +414,14 @@ def get_agent_orchestrator(settings: Settings | None = None) -> AgentOrchestrato
 
 
 def reset_container() -> None:
-    """Limpia los singletons cacheados (útil en tests)."""
+    """Limpia los singletons cacheados (útil en tests).
+
+    Incluye `get_settings` — sin esto, una test fixture que recarga el
+    container hereda el `Settings` cacheado del primer import (con `.env`
+    real), pisando los overrides via `monkeypatch.setenv` y filtrando
+    creds reales (NOTION_TOKEN, DEEPSEEK_API_KEY) hacia tests offline.
+    """
+    get_settings.cache_clear()
     get_user_repository.cache_clear()
     get_jwt_service.cache_clear()
     get_file_storage.cache_clear()
