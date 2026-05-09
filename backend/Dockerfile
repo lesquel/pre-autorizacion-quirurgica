@@ -29,7 +29,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # Layer 2 — código fuente + reinstall (instala el package del proyecto).
+# README.md es requerido por pyproject.toml (`readme = "README.md"`); uv lo
+# lee al construir el package metadata. Sin él, `uv sync` falla con
+# "failed to open file /app/README.md".
 COPY src/ ./src/
+COPY README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 

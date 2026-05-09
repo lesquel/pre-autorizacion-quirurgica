@@ -28,11 +28,13 @@ var/
 .idea
 .editorconfig
 
-# Tests / docs (no se necesitan en runtime)
+# Tests (no se necesitan en runtime)
 tests/
 docs/
-README.md
-*.md
+# README.md SÍ va al context: pyproject.toml declara `readme = "README.md"`
+# y uv lo lee durante `uv sync` para construir el package metadata.
+# Excluirlo rompe el build con "failed to open file /app/README.md".
+# Otros .md sí los podemos excluir (CHANGELOG.md, NOTES.md, etc).
 
 # Otros
 .DS_Store
