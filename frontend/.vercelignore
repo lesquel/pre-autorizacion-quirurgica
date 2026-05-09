@@ -1,0 +1,13 @@
+.angular
+node_modules
+dist
+e2e
+__screenshots__
+coverage
+.git
+.gitignore
+.vscode
+*.log
+.DS_Store
+openapi.json
+bun.lock

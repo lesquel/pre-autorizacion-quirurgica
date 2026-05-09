@@ -1,0 +1,39 @@
+# Build / cache
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.coverage
+htmlcov
+.cache
+
+# Secrets — NUNCA en la imagen. Las env vars se inyectan en runtime por
+# el platform (Cloud Run secrets, Fly secrets, Railway variables).
+.env
+.env.*
+!.env.example
+
+# Runtime artefacts (storage local del operador, no debe ir a la imagen)
+var/
+
+# VCS / IDE
+.git
+.gitignore
+.github
+.vscode
+.idea
+.editorconfig
+
+# Tests / docs (no se necesitan en runtime)
+tests/
+docs/
+README.md
+*.md
+
+# Otros
+.DS_Store
+Thumbs.db

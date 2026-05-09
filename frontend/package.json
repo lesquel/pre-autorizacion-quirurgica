@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "build": "ng build",
+    "build:vercel": "node scripts/inject-env.mjs && ng build --configuration production",
     "gen:api": "openapi-typescript ./openapi.json -o src/app/shared/api/schema.d.ts",
     "ng": "ng",
     "start": "ng serve",
