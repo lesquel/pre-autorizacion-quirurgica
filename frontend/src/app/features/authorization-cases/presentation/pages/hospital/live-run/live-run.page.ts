@@ -49,7 +49,7 @@ const STATUS_TONE: Record<'running' | 'done' | 'error', PillTone> = {
         [breadcrumbs]="['Hospital', 'En curso']"
       />
       <section
-        class="px-7 py-12 flex flex-col items-center gap-4 text-center"
+        class="px-4 lg:px-7 py-12 flex flex-col items-center gap-4 text-center"
       >
         <p class="text-ink-3 dark:text-ink-5 m-0">
           No hay ninguna pre-autorización en curso ahora mismo.
@@ -77,7 +77,7 @@ const STATUS_TONE: Record<'running' | 'done' | 'error', PillTone> = {
         </button>
       </app-page-header>
 
-      <section class="px-7 py-6 flex flex-col gap-5">
+      <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-5">
         <div class="flex items-center gap-3">
           <span
             class="font-mono text-[10px] uppercase tracking-wider text-ink-4"

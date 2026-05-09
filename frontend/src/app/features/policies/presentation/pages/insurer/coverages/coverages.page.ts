@@ -32,7 +32,7 @@ interface EditableCoverage {
       subtitle="Edición masiva por póliza · reemplazo atómico al guardar."
     />
 
-    <section class="px-7 py-6 flex flex-col gap-4">
+    <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-4">
       <div class="flex items-end gap-3">
         <label class="flex flex-col gap-1">
           <span class="font-mono text-[10px] uppercase tracking-wider text-ink-3 dark:text-ink-5">Póliza</span>

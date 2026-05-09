@@ -71,7 +71,7 @@ const SCENARIO_META: Readonly<
       [breadcrumbs]="['Hospital', 'Pre-autorización']"
     />
 
-    <section class="px-7 py-6 flex flex-col gap-6 max-w-[1200px]">
+    <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-6 max-w-[1200px]">
       @if (intakeError()) {
         <div
           role="alert"

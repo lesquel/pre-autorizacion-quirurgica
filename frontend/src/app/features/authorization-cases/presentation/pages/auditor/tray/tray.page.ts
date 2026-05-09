@@ -45,7 +45,7 @@ const FILTERS: readonly FilterChip[] = [
         subtitle="Casos escalados pendientes de revisión clínica"
       />
 
-      <section class="px-7 flex flex-wrap items-center gap-2">
+      <section class="px-0 lg:px-7 flex flex-wrap items-center gap-2">
         @for (chip of filters; track chip.key) {
           <button
             type="button"
@@ -66,7 +66,7 @@ const FILTERS: readonly FilterChip[] = [
         }
       </section>
 
-      <section class="px-7">
+      <section class="px-0 lg:px-7">
         <app-case-table
           [cases]="filteredCases()"
           mode="auditor"

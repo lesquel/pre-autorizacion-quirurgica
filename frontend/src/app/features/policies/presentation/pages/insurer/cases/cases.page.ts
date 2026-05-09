@@ -22,7 +22,7 @@ import { CaseTable } from '../../../../../authorization-cases/presentation/compo
       subtitle="Vista global de pre-autorizaciones"
     />
 
-    <section class="px-7 py-6">
+    <section class="px-0 py-4 lg:px-7 lg:py-6">
       <app-case-table mode="insurer" [cases]="cases()" />
     </section>
   `,

@@ -70,7 +70,7 @@ type ResolutionOutcome = 'APPROVED' | 'REJECTED';
           </p>
         </div>
       } @else if (case_(); as c) {
-        <div class="px-7 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="px-0 lg:px-7 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- IZQUIERDA: contexto clínico/contractual -->
           <div class="flex flex-col gap-4">
             <article class="bg-surface dark:bg-ink border border-line dark:border-ink-3 p-4">

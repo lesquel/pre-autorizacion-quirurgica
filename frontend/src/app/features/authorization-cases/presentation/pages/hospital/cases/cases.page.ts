@@ -28,7 +28,7 @@ import { CaseTable } from '../../../components/case-table/case-table';
       [breadcrumbs]="['Hospital', 'Casos']"
     />
 
-    <section class="px-7 py-6">
+    <section class="px-0 py-4 lg:px-7 lg:py-6">
       <app-case-table
         [cases]="facade.cases()"
         mode="hospital"

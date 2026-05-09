@@ -47,7 +47,67 @@ interface CaseRow {
     @if (rows().length === 0) {
       <div class="text-center text-sm text-ink-4 py-12">No hay casos</div>
     } @else {
-      <div class="w-full overflow-x-auto">
+      <!-- Cards en mobile (< md). Cada card mantiene los mismos datos que la tabla
+           pero stacked vertically con etiquetas a la izquierda. Mejor lectura
+           en pantalla angosta que un overflow-x-auto donde el usuario tiene que
+           scrollear horizontal. -->
+      <div class="md:hidden flex flex-col gap-2">
+        @for (row of rows(); track row.id) {
+          <button
+            type="button"
+            class="w-full text-left p-3 border border-line dark:border-ink-3 bg-surface dark:bg-ink-2 hover:border-ink-4 dark:hover:border-ink-4 transition-colors flex flex-col gap-2"
+            (click)="caseClicked.emit(row.id)"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <app-case-chip [id]="row.id" />
+              <app-outcome-pill [outcome]="row.outcome" />
+            </div>
+            <div class="text-sm text-ink dark:text-bg leading-snug">
+              {{ row.procedure }}
+            </div>
+            <div
+              class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono text-ink-3 dark:text-ink-5"
+            >
+              <div class="flex items-center gap-1.5">
+                <span class="text-ink-4 dark:text-ink-5 uppercase tracking-wider">conf:</span>
+                @if (row.confidence != null) {
+                  <app-confidence [value]="row.confidence" />
+                } @else {
+                  <span>—</span>
+                }
+              </div>
+              <div class="flex items-center gap-1.5 justify-end">
+                <span class="text-ink-4 dark:text-ink-5 uppercase tracking-wider">hace</span>
+                <span class="tabular-nums">{{ timeAgo(row.createdAt) }}</span>
+              </div>
+              @if (mode() === 'insurer') {
+                <div class="col-span-2 truncate">
+                  <span class="text-ink-4 dark:text-ink-5 uppercase tracking-wider">aseg.:</span>
+                  {{ row.insurer ?? '—' }}
+                </div>
+              }
+              @if (mode() === 'auditor') {
+                <div class="col-span-2 truncate">
+                  <span class="text-ink-4 dark:text-ink-5 uppercase tracking-wider">esc.:</span>
+                  {{ row.escalationReason ?? '—' }}
+                </div>
+              } @else {
+                <div class="col-span-2 flex items-center gap-1.5 justify-end tabular-nums">
+                  <span class="text-ink-4 dark:text-ink-5 uppercase tracking-wider">dur.</span>
+                  @if (row.lastDurationMs != null) {
+                    {{ formatDuration(row.lastDurationMs) }}
+                  } @else {
+                    <span>—</span>
+                  }
+                </div>
+              }
+            </div>
+          </button>
+        }
+      </div>
+
+      <!-- Tabla en md+ (≥768px). Mismo markup que antes — sin cambios. -->
+      <div class="hidden md:block w-full overflow-x-auto">
         <table class="w-full text-left">
           <thead>
             <tr

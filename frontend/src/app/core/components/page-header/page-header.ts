@@ -13,7 +13,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <header
-      class="grid grid-cols-[1fr_auto] items-end gap-6 px-7 pt-5 pb-4 bg-surface dark:bg-ink border-b border-line dark:border-ink-3"
+      class="grid grid-cols-[1fr_auto] items-end gap-3 sm:gap-6 px-4 sm:px-5 lg:px-7 pt-4 lg:pt-5 pb-3 lg:pb-4 bg-surface dark:bg-ink border-b border-line dark:border-ink-3"
     >
       <div>
         @if (breadcrumbs()?.length) {
@@ -30,7 +30,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         }
 
         <h1
-          class="font-serif text-2xl font-semibold tracking-tight leading-tight text-ink dark:text-bg m-0"
+          class="font-serif text-xl sm:text-2xl font-semibold tracking-tight leading-tight text-ink dark:text-bg m-0"
         >
           {{ title() }}
         </h1>

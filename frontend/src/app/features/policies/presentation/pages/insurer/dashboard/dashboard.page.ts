@@ -38,7 +38,7 @@ interface OutcomeBar {
       subtitle="Vista global de la operación"
     />
 
-    <section class="px-7 py-6 flex flex-col gap-6">
+    <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-6">
       <!-- KPI cards principales (5 columnas) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <app-metric label="Total casos" [value]="m().total" />

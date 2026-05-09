@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
+import { LayoutService } from '../../services/layout.service';
 import { RoleService } from '../../services/role.service';
 import type { Role } from '../../types/role';
 
@@ -42,7 +43,8 @@ const NAV_ITEMS: Record<Role, readonly NavItem[]> = {
  * Cada item es un `routerLink` con `routerLinkActive` para resaltar la ruta
  * actual. Si llegan `counts`, muestra un contador discreto a la derecha.
  *
- * Nota: las rutas son placeholders y Wave 5 las wirea en el router.
+ * En mobile cierra el drawer al hacer click en un link (vía LayoutService);
+ * en desktop el sidenav está siempre visible y closeSidenav() es no-op visual.
  */
 @Component({
   selector: 'app-sidenav',
@@ -50,7 +52,10 @@ const NAV_ITEMS: Record<Role, readonly NavItem[]> = {
   imports: [RouterLink, RouterLinkActive],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <nav class="py-4 overflow-y-auto bg-bg-2 dark:bg-ink-2 text-ink-2 dark:text-ink-5">
+    <nav
+      id="app-sidenav"
+      class="h-full w-full py-4 overflow-y-auto bg-bg-2 dark:bg-ink-2 text-ink-2 dark:text-ink-5"
+    >
       <div class="px-4">
         <div
           class="font-mono text-[10px] uppercase tracking-wider text-ink-4 dark:text-ink-5 mb-2 pb-1.5 border-b border-line dark:border-ink-3"
@@ -62,7 +67,8 @@ const NAV_ITEMS: Record<Role, readonly NavItem[]> = {
           <a
             [routerLink]="item.path"
             routerLinkActive="bg-surface dark:bg-ink text-ink dark:text-bg border-l-accent"
-            class="flex items-center justify-between px-2 py-1.5 -mx-2 font-mono text-xs text-ink-2 dark:text-ink-5 border-l-2 border-transparent hover:bg-bg-3 dark:hover:bg-ink transition-colors"
+            class="flex items-center justify-between px-2 py-2 -mx-2 font-mono text-xs text-ink-2 dark:text-ink-5 border-l-2 border-transparent hover:bg-bg-3 dark:hover:bg-ink transition-colors"
+            (click)="onLinkClick()"
           >
             <span>{{ item.label }}</span>
             @if (countFor(item.id); as count) {
@@ -76,6 +82,7 @@ const NAV_ITEMS: Record<Role, readonly NavItem[]> = {
 })
 export class Sidenav {
   private readonly roleService = inject(RoleService);
+  private readonly layout = inject(LayoutService);
 
   readonly counts = input<Record<string, number> | undefined>(undefined);
 
@@ -95,5 +102,15 @@ export class Sidenav {
     if (!map) return null;
     const value = map[id];
     return typeof value === 'number' ? value : null;
+  }
+
+  /**
+   * En mobile el sidenav es un drawer; cerrarlo en cada click evita que se
+   * quede flotando sobre el contenido tras navegar. En desktop no hay drawer
+   * abierto, así que `closeSidenav()` solo escribe `false` en la signal —
+   * la grid del shell ignora ese flag en `lg+`.
+   */
+  protected onLinkClick(): void {
+    this.layout.closeSidenav();
   }
 }

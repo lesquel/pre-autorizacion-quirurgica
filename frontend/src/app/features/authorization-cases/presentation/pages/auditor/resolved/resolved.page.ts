@@ -29,7 +29,7 @@ import { CaseTable } from '../../../components';
         subtitle="Histórico de decisiones de auditores"
       />
 
-      <section class="px-7">
+      <section class="px-0 lg:px-7">
         <app-case-table
           [cases]="resolvedCases()"
           mode="auditor"

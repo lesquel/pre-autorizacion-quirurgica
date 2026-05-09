@@ -30,7 +30,7 @@ interface PolicyRow {
   template: `
     <app-page-header title="Pólizas" subtitle="Gestión de pólizas" />
 
-    <section class="px-7 py-6 flex flex-col gap-4">
+    <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-4">
       <div class="flex justify-end">
         <button
           type="button"

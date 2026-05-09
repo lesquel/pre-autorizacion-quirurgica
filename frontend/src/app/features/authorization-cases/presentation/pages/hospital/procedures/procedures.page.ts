@@ -26,7 +26,7 @@ import type { Procedure } from '../../../../../../shared/domain/entities';
       [breadcrumbs]="['Hospital', 'Procedimientos']"
     />
 
-    <section class="px-7 py-6">
+    <section class="px-0 py-4 lg:px-7 lg:py-6">
       <div
         class="bg-surface dark:bg-ink border border-line dark:border-ink-3 overflow-x-auto"
       >
