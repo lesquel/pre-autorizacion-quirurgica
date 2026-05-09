@@ -66,3 +66,74 @@ body {
   background: var(--color-accent-soft);
   color: var(--color-accent-ink);
 }
+
+/*
+ * driver.js dark-mode overrides — el CSS upstream tiene `background:#fff;
+ * color:#2d2d2d` hardcoded. Sin esto, el popover en dark mode se ve como
+ * caja blanca flotando sobre fondo oscuro (issue M2 del adversarial review).
+ * Usamos los design tokens del @theme para mantener coherencia con el resto.
+ */
+.dark .driver-popover {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
+}
+
+.dark .driver-popover-title {
+  color: var(--color-ink);
+}
+
+.dark .driver-popover-description {
+  color: var(--color-ink-2);
+}
+
+.dark .driver-popover-progress-text {
+  color: var(--color-ink-3);
+}
+
+.dark .driver-popover-close-btn {
+  color: var(--color-ink-4);
+}
+.dark .driver-popover-close-btn:hover,
+.dark .driver-popover-close-btn:focus {
+  color: var(--color-ink);
+}
+
+.dark .driver-popover-footer button {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  border-color: var(--color-line);
+  text-shadow: none;
+}
+.dark .driver-popover-footer button:hover,
+.dark .driver-popover-footer button:focus {
+  background-color: var(--color-bg-3);
+}
+
+/* Arrows: el CSS upstream pone `border:5px solid #fff` y luego transparenta
+ * los lados que no se ven; pisamos solo el color base para que la flecha
+ * matche el fondo del popover en dark. */
+.dark .driver-popover-arrow {
+  border-color: var(--color-surface);
+}
+.dark .driver-popover-arrow-side-left {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  border-top-color: transparent;
+}
+.dark .driver-popover-arrow-side-right {
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-top-color: transparent;
+}
+.dark .driver-popover-arrow-side-top {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+.dark .driver-popover-arrow-side-bottom {
+  border-left-color: transparent;
+  border-top-color: transparent;
+  border-right-color: transparent;
+}

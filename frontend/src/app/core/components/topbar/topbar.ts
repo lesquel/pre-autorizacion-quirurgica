@@ -5,6 +5,7 @@ import {
   inject,
 } from '@angular/core';
 
+import { AuthFacade } from '../../../features/auth/application/facades/auth.facade';
 import { Segmented, type SegmentedOption } from '../../../shared/ui/segmented/segmented';
 import { RoleService } from '../../services/role.service';
 import { TourService } from '../../services/tour.service';
@@ -77,6 +78,7 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
 export class Topbar {
   private readonly roleService = inject(RoleService);
   private readonly tourService = inject(TourService);
+  private readonly auth = inject(AuthFacade);
 
   protected readonly roleOptions: SegmentedOption[] = [
     { value: 'hospital', label: 'Hospital' },
@@ -92,6 +94,8 @@ export class Topbar {
   }
 
   protected onStartTour(): void {
-    void this.tourService.start();
+    // Pasamos el userId activo para que el flag "tour seen" sea per-user
+    // (evita que en una shared workstation se herede el flag de otro user).
+    void this.tourService.start({ userId: this.auth.currentUser()?.id ?? null });
   }
 }

@@ -132,6 +132,28 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _check_cors_wildcard_with_credentials(self) -> Settings:
+        """`CORS_ORIGINS=*` + `allow_credentials=True` es self-DoS.
+
+        El CORSMiddleware se monta SIEMPRE con `allow_credentials=True` en
+        `main.py` (las cookies de auth dependen de eso). Si además
+        `cors_origins` incluye `"*"`, el navegador rechaza TODA respuesta
+        CORS por la spec — el frontend queda desconectado del backend sin
+        ningún error visible del lado server. Stop esto en producción y
+        warn en dev.
+        """
+        if "*" in self.cors_origins:
+            msg = (
+                "CORS_ORIGINS contiene '*' pero la app monta CORSMiddleware con "
+                "allow_credentials=True. Los browsers rechazan esa combinación "
+                "(spec CORS). Listá orígenes explícitos en CORS_ORIGINS."
+            )
+            if self.app_env == "production":
+                raise ValueError(msg)
+            warnings.warn(msg, stacklevel=2)
+        return self
+
     # ── Computed ─────────────────────────────────────────────────────────
 
     @computed_field  # type: ignore[prop-decorator]

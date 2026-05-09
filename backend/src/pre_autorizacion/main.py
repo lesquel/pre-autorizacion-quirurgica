@@ -143,12 +143,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ── Routers ─────────────────────────────────────────────────────────
     _register_feature_routers(app)
 
+    # cors_origins COUNT en INFO; la lista completa solo a DEBUG. Sin esto,
+    # la topología del service mesh (qué frontends llegan a este backend)
+    # se shippea a cada SIEM/log aggregator innecesariamente.
     _logger.info(
         "app.started",
         env=cfg.app_env,
         use_notion=cfg.use_notion,
-        cors_origins=cfg.cors_origins,
+        cors_origins_count=len(cfg.cors_origins),
     )
+    _logger.debug("app.started.cors_origins", cors_origins=cfg.cors_origins)
     return app
 
 

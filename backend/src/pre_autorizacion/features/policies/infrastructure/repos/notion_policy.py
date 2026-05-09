@@ -52,12 +52,14 @@ class NotionPolicyRepository(PolicyRepository):
             )
         return created
 
-    async def update(self, policy: Policy) -> Policy:  # type: ignore[override]
+    async def update(self, policy: Policy) -> Policy:
         raise NotImplementedError(
-            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
+            f"CRUD on Notion is out of scope for v1 (tried to update "
+            f"policy {policy.number!r}). Use InMemoryPolicyRepository."
         )
 
-    async def delete(self, number: str) -> None:  # type: ignore[override]
+    async def delete(self, number: str) -> None:
         raise NotImplementedError(
-            "CRUD on Notion is out of scope for v1. Use InMemoryPolicyRepository."
+            f"CRUD on Notion is out of scope for v1 (tried to delete "
+            f"policy {number!r}). Use InMemoryPolicyRepository."
         )

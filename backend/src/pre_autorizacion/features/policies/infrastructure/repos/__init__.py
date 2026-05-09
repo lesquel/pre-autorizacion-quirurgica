@@ -41,23 +41,27 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
+    # Evitamos aliasar el import a un nombre local compartido (`_Cls`) entre
+    # branches: mypy infería `_Cls` como el tipo de la primera rama y se
+    # quejaba en las siguientes con `[assignment]`. Devolvemos el símbolo
+    # importado directamente — un retorno por rama, sin estado compartido.
     if name == "NotionCoverageRepository":
         from pre_autorizacion.features.policies.infrastructure.repos.notion_coverage import (
-            NotionCoverageRepository as _Cls,
+            NotionCoverageRepository,
         )
 
-        return _Cls
+        return NotionCoverageRepository
     if name == "NotionInsurerRepository":
         from pre_autorizacion.features.policies.infrastructure.repos.notion_insurer import (
-            NotionInsurerRepository as _Cls,
+            NotionInsurerRepository,
         )
 
-        return _Cls
+        return NotionInsurerRepository
     if name == "NotionPolicyRepository":
         from pre_autorizacion.features.policies.infrastructure.repos.notion_policy import (
-            NotionPolicyRepository as _Cls,
+            NotionPolicyRepository,
         )
 
-        return _Cls
+        return NotionPolicyRepository
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

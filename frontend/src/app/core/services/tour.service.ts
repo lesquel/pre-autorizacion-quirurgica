@@ -121,7 +121,18 @@ const TOUR_STEPS: readonly TourStepConfig[] = [
   },
 ];
 
-const TOUR_SEEN_KEY = 'preauth.tour.seen';
+/**
+ * Prefijo común del flag "ya vi el tour". Se concatena con el `userId` para
+ * que cada usuario tenga su propio flag (issue M3 del adversarial review:
+ * shared workstation no debe heredar el flag del usuario anterior).
+ */
+const TOUR_SEEN_KEY_PREFIX = 'preauth.tour.seen';
+const TOUR_SEEN_ANON_SUFFIX = 'anon';
+
+function tourSeenKey(userId: string | null | undefined): string {
+  const suffix = userId && userId.length > 0 ? userId : TOUR_SEEN_ANON_SUFFIX;
+  return `${TOUR_SEEN_KEY_PREFIX}.${suffix}`;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TourService {
@@ -136,6 +147,9 @@ export class TourService {
    */
   private aborted = false;
 
+  /** UserId activo durante la corrida del tour — usado para scope de markSeen(). */
+  private currentUserId: string | null = null;
+
   /**
    * Cache del módulo driver.js. Se carga lazy la primera vez que se llama
    * a `start()` para que el bundle inicial no incluya driver.js (~20 KB
@@ -146,20 +160,29 @@ export class TourService {
   /** Signal pública para que la UI pueda reaccionar (por ejemplo, deshabilitar botones). */
   readonly active = signal(false);
 
-  /** ¿Ya se mostró el tour antes en esta máquina? Lee localStorage best-effort. */
-  hasBeenSeen(): boolean {
+  /**
+   * ¿El usuario `userId` ya vio el tour en este browser?
+   * Si `userId` es null/undefined cae a un scope anónimo — sigue siendo
+   * mejor que el flag global porque queda separado de cualquier user id.
+   */
+  hasBeenSeen(userId: string | null | undefined = null): boolean {
     if (typeof window === 'undefined') return false;
     try {
-      return window.localStorage.getItem(TOUR_SEEN_KEY) === '1';
+      return window.localStorage.getItem(tourSeenKey(userId)) === '1';
     } catch {
       return false;
     }
   }
 
-  /** Lanza el tour completo. Idempotente: si ya está activo, no hace nada. */
-  async start(): Promise<void> {
+  /**
+   * Lanza el tour completo. Idempotente: si ya está activo, no hace nada.
+   * `opts.userId` se usa para scope del flag "tour seen" (evita que un
+   * usuario en una shared workstation herede el flag de otro).
+   */
+  async start(opts?: { userId?: string | null }): Promise<void> {
     if (this.instance !== null) return;
     this.aborted = false;
+    this.currentUserId = opts?.userId ?? null;
     this.active.set(true);
 
     // Lazy load: driver.js solo se descarga cuando el usuario abre el tour
@@ -167,6 +190,14 @@ export class TourService {
     const { driver } = await this.loadDriver();
     if (this.aborted) {
       // El usuario cerró antes de que terminara la descarga — desistimos.
+      this.active.set(false);
+      return;
+    }
+
+    // Pre-alineación del primer step: sin esto, el primer popover puede
+    // renderizarse antes de que el rol/ruta inicial estén sincronizados.
+    await this.alignToStep(TOUR_STEPS[0]);
+    if (this.aborted) {
       this.active.set(false);
       return;
     }
@@ -182,8 +213,19 @@ export class TourService {
       prevBtnText: '← Anterior',
       doneBtnText: '✓ Listo',
       overlayColor: 'rgba(20, 19, 15, 0.55)',
+      // Tomamos control manual de la transición entre steps. Sin esto,
+      // driver.js avanza el step ANTES de que terminemos de navegar a la
+      // ruta destino — el popover renderiza buscando un selector en una
+      // ruta que todavía no se montó (issue M1 del adversarial review).
+      onNextClick: () => {
+        void this.handleNavigationClick('next');
+      },
+      onPrevClick: () => {
+        void this.handleNavigationClick('prev');
+      },
       onDestroyed: () => {
         this.instance = null;
+        this.currentUserId = null;
         this.active.set(false);
         this.markSeen();
       },
@@ -202,10 +244,10 @@ export class TourService {
   }
 
   /** Resetea el flag "tour seen" — útil para devs que quieran ver el tour de nuevo. */
-  resetSeenFlag(): void {
+  resetSeenFlag(userId?: string | null): void {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.removeItem(TOUR_SEEN_KEY);
+      window.localStorage.removeItem(tourSeenKey(userId ?? null));
     } catch {
       // No-op: storage deshabilitado.
     }
@@ -221,35 +263,54 @@ export class TourService {
   }
 
   private buildDriveSteps(): DriveStep[] {
-    return TOUR_STEPS.map((cfg) => {
-      const driveStep: DriveStep = {
-        element: cfg.element,
-        popover: {
-          title: cfg.title,
-          description: cfg.description,
-          side: cfg.side,
-          align: cfg.align,
-          // driver.js permite HTML en description; usamos para <strong>/<kbd>.
-          // El sanitization lo cubre el navegador (no inyectamos input del user).
-        },
-        onHighlightStarted: (_el, _step, _opts) => {
-          // Sincronizamos rol + ruta ANTES del highlight. Como driver.js no
-          // espera promesas en este callback, lanzamos la nav async y
-          // confiamos en que el `settleMs` + el waitForElement nos den tiempo
-          // antes de que el render del popover busque el elemento.
-          void this.alignToStep(cfg);
-        },
-      };
-      return driveStep;
-    });
+    // No usamos `onHighlightStarted` por step: la sincronización de rol/
+    // ruta corre en `onNextClick`/`onPrevClick` global, ANTES de pedirle a
+    // driver.js que avance. El popover entonces apunta a un elemento que
+    // ya existe en el DOM.
+    return TOUR_STEPS.map((cfg) => ({
+      element: cfg.element,
+      popover: {
+        title: cfg.title,
+        description: cfg.description,
+        side: cfg.side,
+        align: cfg.align,
+        // driver.js permite HTML en description; usamos para <strong>/<kbd>.
+        // El sanitization lo cubre el navegador (no inyectamos input del user).
+      },
+    }));
+  }
+
+  /**
+   * Lógica común de los hooks `onNextClick` / `onPrevClick`: navega al
+   * step destino, espera a que el elemento esté en el DOM, y recién ahí
+   * le dice a driver.js que avance / retroceda.
+   */
+  private async handleNavigationClick(direction: 'next' | 'prev'): Promise<void> {
+    if (this.aborted || this.instance === null) return;
+
+    const currentIdx = this.instance.getActiveIndex() ?? 0;
+    const targetIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+
+    if (targetIdx >= TOUR_STEPS.length) {
+      // Más allá del último step → cerrar (driver.js no llama a onDestroy
+      // automáticamente cuando interceptamos onNextClick en el último).
+      this.instance.destroy();
+      return;
+    }
+    if (targetIdx < 0) return;
+
+    await this.alignToStep(TOUR_STEPS[targetIdx]);
+    if (this.aborted || this.instance === null) return;
+
+    if (direction === 'next') {
+      this.instance.moveNext();
+    } else {
+      this.instance.movePrevious();
+    }
   }
 
   /**
    * Asegura que el rol y la ruta correspondan al step antes del highlight.
-   * Best-effort: si la navegación tarda más que `settleMs`, el popover
-   * puede aparecer brevemente sobre el elemento equivocado y luego
-   * reposicionarse cuando el DOM se actualiza.
-   *
    * Chequea `aborted` en cada hop para cortar si el usuario cerró el tour
    * mientras esto seguía corriendo (issue H_C4).
    */
@@ -306,7 +367,7 @@ export class TourService {
   private markSeen(): void {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(TOUR_SEEN_KEY, '1');
+      window.localStorage.setItem(tourSeenKey(this.currentUserId), '1');
     } catch {
       // No-op.
     }

@@ -82,19 +82,22 @@ export class App {
       }
     });
 
-    // Auto-start del tour guiado en la PRIMERA visita post-login. localStorage
-    // flag (`preauth.tour.seen`) bloquea las siguientes; el botón `?` del
-    // TopBar permite re-abrirlo cuando el usuario quiera.
+    // Auto-start del tour guiado en la PRIMERA visita post-login. El flag
+    // `preauth.tour.seen.<userId>` bloquea las siguientes; el botón `?` del
+    // TopBar permite re-abrirlo cuando el usuario quiera. El scope por
+    // userId evita que en una shared workstation, el primer login bloquee
+    // la auto-tour de los siguientes usuarios.
     effect(() => {
+      const user = this.auth.currentUser();
       if (
         !this.autoTourFired &&
-        this.auth.isAuthenticated() &&
-        !this.tour.hasBeenSeen()
+        user !== null &&
+        !this.tour.hasBeenSeen(user.id)
       ) {
         this.autoTourFired = true;
         // Pequeño delay para que el shell-layout termine de renderizar antes
         // del primer highlight (evita flicker del popover sobre el área vacía).
-        setTimeout(() => void this.tour.start(), 600);
+        setTimeout(() => void this.tour.start({ userId: user.id }), 600);
       }
     });
   }
