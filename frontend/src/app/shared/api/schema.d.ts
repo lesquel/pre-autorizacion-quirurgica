@@ -246,6 +246,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/extract/medical-report-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extraer campos del informe médico (PDF) para autocompletar el formulario */
+        post: operations["extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/extract/policy-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extraer campos de la póliza del paciente (PDF) para autocompletar el formulario */
+        post: operations["extract_policy_pdf_api_v1_extract_policy_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/policies": {
         parameters: {
             query?: never;
@@ -390,10 +424,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List or search patients */
+        get: operations["list_patients_api_v1_patients_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{patient_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a single patient by id */
+        get: operations["get_patient_api_v1_patients__patient_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post */
+        Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post: {
+            /**
+             * File
+             * @description PDF del informe médico (hospital)
+             */
+            file: string;
+        };
+        /** Body_extract_policy_pdf_api_v1_extract_policy_pdf_post */
+        Body_extract_policy_pdf_api_v1_extract_policy_pdf_post: {
+            /**
+             * File
+             * @description PDF de póliza / certificado aseguradora
+             */
+            file: string;
+        };
         /** Body_submit_case_upload_api_v1_cases_upload_post */
         Body_submit_case_upload_api_v1_cases_upload_post: {
             /** Policy Number */
@@ -631,6 +715,57 @@ export interface components {
             user: components["schemas"]["UserOut"];
         };
         /**
+         * MedicalPdfExtractOut
+         * @description Campos típicos del informe médico (plantilla `docs/informe-medico-template.md`).
+         */
+        MedicalPdfExtractOut: {
+            /**
+             * Patient Id
+             * @description ID o número de historia del paciente si aparece.
+             */
+            patient_id?: string | null;
+            /**
+             * Policy Number
+             * @description Número de póliza si consta en el informe.
+             */
+            policy_number?: string | null;
+            /**
+             * Attending Doctor
+             * @description Médico tratante.
+             */
+            attending_doctor?: string | null;
+            /**
+             * Diagnosis
+             * @description Diagnóstico principal en texto.
+             */
+            diagnosis?: string | null;
+            /**
+             * Diagnosis Code
+             * @description CIE-10 del diagnóstico principal.
+             */
+            diagnosis_code?: string | null;
+            /**
+             * Procedure Code
+             * @description CIE-10 del procedimiento solicitado, si aplica.
+             */
+            procedure_code?: string | null;
+            /**
+             * Procedure Name
+             * @description Nombre del procedimiento propuesto.
+             */
+            procedure_name?: string | null;
+            /**
+             * Report Text Summary
+             * @description Resumen breve o primeros párrafos citables del informe (opcional).
+             */
+            report_text_summary?: string | null;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+        };
+        /**
          * MedicalReportIn
          * @description Informe médico que el hospital adjunta al crear un caso.
          */
@@ -663,6 +798,22 @@ export interface components {
          * @enum {string}
          */
         Outcome: "APPROVED_AUTO" | "DOCS_REQUESTED" | "ESCALATED" | "DECIDED" | "PENDING";
+        /** PatientOut */
+        PatientOut: {
+            /** Id */
+            id: string;
+            /** Dni */
+            dni: string;
+            /** Name */
+            name: string;
+            /**
+             * Dob
+             * Format: date
+             */
+            dob: string;
+            /** Sex */
+            sex: string;
+        };
         /**
          * PolicyIn
          * @description Body de POST/PUT /policies.
@@ -712,6 +863,37 @@ export interface components {
              */
             endDate: string;
             status: components["schemas"]["PolicyStatus"];
+        };
+        /**
+         * PolicyPdfExtractOut
+         * @description Campos típicos de la póliza (plantilla `docs/poliza-paciente-template.md`).
+         */
+        PolicyPdfExtractOut: {
+            /**
+             * Policy Number
+             * @description Número de póliza.
+             */
+            policy_number?: string | null;
+            /**
+             * Patient Id
+             * @description Identificación del paciente cubierto si aparece (cédula, ID interno, etc.).
+             */
+            patient_id?: string | null;
+            /**
+             * Insurer Name
+             * @description Nombre de la aseguradora.
+             */
+            insurer_name?: string | null;
+            /**
+             * Plan Name
+             * @description Plan o producto.
+             */
+            plan_name?: string | null;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
         };
         /**
          * PolicyStatus
@@ -1228,6 +1410,72 @@ export interface operations {
             };
         };
     };
+    extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalPdfExtractOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_policy_pdf_api_v1_extract_policy_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_extract_policy_pdf_api_v1_extract_policy_pdf_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyPdfExtractOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_policies_api_v1_policies_get: {
         parameters: {
             query?: never;
@@ -1534,6 +1782,90 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProcedureOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_patients_api_v1_patients_get: {
+        parameters: {
+            query?: {
+                /** @description Filtra por DNI exacto (devuelve 0 ó 1). */
+                dni?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientOut"][];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_patient_api_v1_patients__patient_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientOut"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Patient not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

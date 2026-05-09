@@ -11,6 +11,7 @@ método, path y status code.
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -22,6 +23,12 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 REQUEST_ID_HEADER = "X-Request-Id"
+
+# Sanitización del header entrante: aceptamos solo [A-Za-z0-9_-] y truncamos a 64.
+# Sin esto, un cliente malicioso puede inyectar newlines o secuencias de escape
+# que terminan en structlog (JSON o terminal) — log injection / audit forgery.
+_REQUEST_ID_SAFE_RE = re.compile(r"[^A-Za-z0-9_\-]")
+_REQUEST_ID_MAX_LEN = 64
 
 _logger = structlog.get_logger("api")
 
@@ -38,7 +45,11 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         incoming = request.headers.get(REQUEST_ID_HEADER)
-        request_id = incoming or uuid.uuid4().hex
+        if incoming:
+            sanitized = _REQUEST_ID_SAFE_RE.sub("", incoming)[:_REQUEST_ID_MAX_LEN]
+            request_id = sanitized or uuid.uuid4().hex
+        else:
+            request_id = uuid.uuid4().hex
         request.state.request_id = request_id
 
         # Limpia y bindea contextvars de structlog para este request.

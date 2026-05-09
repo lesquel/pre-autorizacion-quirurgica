@@ -29,7 +29,12 @@ ListPatientsDep = Annotated[ListPatientsUseCase, Depends(_get_list_use_case)]
 GetPatientByIdDep = Annotated[GetPatientByIdUseCase, Depends(_get_by_id_use_case)]
 
 
-@router.get("", response_model=list[PatientOut], summary="List or search patients")
+@router.get(
+    "",
+    response_model=list[PatientOut],
+    summary="List or search patients",
+    responses={401: {"description": "Missing or invalid bearer token."}},
+)
 async def list_patients(
     use_case: ListPatientsDep,
     _user: Annotated[User, Depends(require_authenticated)],
@@ -43,7 +48,10 @@ async def list_patients(
     "/{patient_id}",
     response_model=PatientOut,
     summary="Get a single patient by id",
-    responses={404: {"description": "Patient not found."}},
+    responses={
+        401: {"description": "Missing or invalid bearer token."},
+        404: {"description": "Patient not found."},
+    },
 )
 async def get_patient(
     patient_id: str,

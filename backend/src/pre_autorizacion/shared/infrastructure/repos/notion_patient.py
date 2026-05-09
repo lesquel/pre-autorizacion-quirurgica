@@ -23,6 +23,7 @@ from pre_autorizacion.shared.domain.entities.patient import Patient
 from pre_autorizacion.shared.domain.ports import PatientRepository
 from pre_autorizacion.shared.notion import NotionClient
 from pre_autorizacion.shared.notion.entities import notion_to_patient
+from pre_autorizacion.shared.notion.errors import NotionRequestError
 
 # Notion page_ids son UUIDs v4. Los aceptamos con o sin guiones (la API los
 # devuelve con guiones, pero algunos clientes los mandan sin).
@@ -49,10 +50,16 @@ class NotionPatientRepository(PatientRepository):
 
     async def find_by_id(self, patient_id: str) -> Patient | None:
         # Si parece page_id Notion → retrieve directo (1 round-trip).
+        # Notion responde 404 cuando la page no existe; lo traducimos a None
+        # para que el use case levante NotFoundError (→ 404 RFC 7807) en vez
+        # de propagar el upstream como 502.
         if _looks_like_notion_page_id(patient_id):
-            page = await self._client.retrieve_page(patient_id)
-            if not page:
-                return None
+            try:
+                page = await self._client.retrieve_page(patient_id)
+            except NotionRequestError as exc:
+                if exc.status_code == 404:
+                    return None
+                raise
             return notion_to_patient(page)
         # Fallback: id sintético (no hay property por contrato para filtrarlo).
         # Tira lectura completa y filtra client-side. Acceptable para v1

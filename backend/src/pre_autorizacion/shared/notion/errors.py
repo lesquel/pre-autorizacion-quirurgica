@@ -1,13 +1,17 @@
 """Excepciones del adapter Notion.
 
-Vivimos en `shared/notion/` (capa de infrastructure compartida) — los slices
-que necesiten distinguir errores Notion de otros fallos importan desde acá.
+Hereda de la jerarquía dominio (`shared.domain.errors.NotionError` →
+`IntegrationError` → `DomainError`) para que `register_error_handlers`
+las mapee a Problem Details RFC 7807. Antes vivían como `Exception`
+plana y se caían al handler genérico → 500 opaco.
 """
 
 from __future__ import annotations
 
+from pre_autorizacion.shared.domain.errors import NotionError as _DomainNotionError
 
-class NotionError(Exception):
+
+class NotionError(_DomainNotionError):
     """Error genérico de la integración con Notion (HTTP, parsing, etc.)."""
 
 

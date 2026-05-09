@@ -568,6 +568,98 @@
         }
       }
     },
+    "/api/v1/extract/medical-report-pdf": {
+      "post": {
+        "tags": [
+          "extract"
+        ],
+        "summary": "Extraer campos del informe médico (PDF) para autocompletar el formulario",
+        "operationId": "extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicalPdfExtractOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/extract/policy-pdf": {
+      "post": {
+        "tags": [
+          "extract"
+        ],
+        "summary": "Extraer campos de la póliza del paciente (PDF) para autocompletar el formulario",
+        "operationId": "extract_policy_pdf_api_v1_extract_policy_pdf_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_policy_pdf_api_v1_extract_policy_pdf_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyPdfExtractOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/policies": {
       "get": {
         "tags": [
@@ -1077,10 +1169,156 @@
           }
         }
       }
+    },
+    "/api/v1/patients": {
+      "get": {
+        "tags": [
+          "patients"
+        ],
+        "summary": "List or search patients",
+        "operationId": "list_patients_api_v1_patients_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dni",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtra por DNI exacto (devuelve 0 ó 1).",
+              "title": "Dni"
+            },
+            "description": "Filtra por DNI exacto (devuelve 0 ó 1)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PatientOut"
+                  },
+                  "title": "Response List Patients Api V1 Patients Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/patients/{patient_id}": {
+      "get": {
+        "tags": [
+          "patients"
+        ],
+        "summary": "Get a single patient by id",
+        "operationId": "get_patient_api_v1_patients__patient_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "404": {
+            "description": "Patient not found."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "PDF del informe médico (hospital)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_medical_report_pdf_api_v1_extract_medical_report_pdf_post"
+      },
+      "Body_extract_policy_pdf_api_v1_extract_policy_pdf_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "PDF de póliza / certificado aseguradora"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_policy_pdf_api_v1_extract_policy_pdf_post"
+      },
       "Body_submit_case_upload_api_v1_cases_upload_post": {
         "properties": {
           "policy_number": {
@@ -1658,6 +1896,116 @@
         "title": "LoginResponse",
         "description": "Respuesta de `POST /auth/login`."
       },
+      "MedicalPdfExtractOut": {
+        "properties": {
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id",
+            "description": "ID o número de historia del paciente si aparece."
+          },
+          "policy_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Number",
+            "description": "Número de póliza si consta en el informe."
+          },
+          "attending_doctor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attending Doctor",
+            "description": "Médico tratante."
+          },
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis",
+            "description": "Diagnóstico principal en texto."
+          },
+          "diagnosis_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Code",
+            "description": "CIE-10 del diagnóstico principal."
+          },
+          "procedure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Code",
+            "description": "CIE-10 del procedimiento solicitado, si aplica."
+          },
+          "procedure_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Name",
+            "description": "Nombre del procedimiento propuesto."
+          },
+          "report_text_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Text Summary",
+            "description": "Resumen breve o primeros párrafos citables del informe (opcional)."
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "MedicalPdfExtractOut",
+        "description": "Campos típicos del informe médico (plantilla `docs/informe-medico-template.md`)."
+      },
       "MedicalReportIn": {
         "properties": {
           "patientId": {
@@ -1728,6 +2076,40 @@
         ],
         "title": "Outcome",
         "description": "Outcome — resultado emitido por el agente o el auditor."
+      },
+      "PatientOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "dni": {
+            "type": "string",
+            "title": "Dni"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "dob": {
+            "type": "string",
+            "format": "date",
+            "title": "Dob"
+          },
+          "sex": {
+            "type": "string",
+            "title": "Sex"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dni",
+          "name",
+          "dob",
+          "sex"
+        ],
+        "title": "PatientOut"
       },
       "PolicyIn": {
         "properties": {
@@ -1818,6 +2200,68 @@
         ],
         "title": "PolicyOut",
         "description": "Póliza — DTO de salida."
+      },
+      "PolicyPdfExtractOut": {
+        "properties": {
+          "policy_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Number",
+            "description": "Número de póliza."
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id",
+            "description": "Identificación del paciente cubierto si aparece (cédula, ID interno, etc.)."
+          },
+          "insurer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Name",
+            "description": "Nombre de la aseguradora."
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name",
+            "description": "Plan o producto."
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "PolicyPdfExtractOut",
+        "description": "Campos típicos de la póliza (plantilla `docs/poliza-paciente-template.md`)."
       },
       "PolicyStatus": {
         "type": "string",

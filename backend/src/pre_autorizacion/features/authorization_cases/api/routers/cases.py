@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -314,7 +315,7 @@ async def download_case_file(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="File not found") from exc
 
-    def _iter() -> object:
+    def _iter() -> Iterator[bytes]:
         yield data
 
     return StreamingResponse(
