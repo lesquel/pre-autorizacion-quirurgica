@@ -159,6 +159,24 @@ class NotionClient:
                 status_code=getattr(exc, "status", None),
             ) from exc
 
+    async def archive_page(self, page_id: str) -> dict[str, Any]:
+        """Soft-delete: marca la page como archivada.
+
+        Notion no expone un endpoint DELETE para pages; el patrón oficial
+        es `pages.update(archived=True)`. La page queda invisible en queries
+        pero recuperable desde la papelera de Notion.
+        """
+        try:
+            return cast(
+                "dict[str, Any]",
+                await self._client.pages.update(page_id=page_id, archived=True),
+            )
+        except (APIResponseError, RequestTimeoutError, httpx.HTTPError) as exc:
+            raise NotionRequestError(
+                f"Notion archive_page failed: {exc}",
+                status_code=getattr(exc, "status", None),
+            ) from exc
+
     async def aclose(self) -> None:
         """Cierra el HTTP client subyacente (gracefully).
 

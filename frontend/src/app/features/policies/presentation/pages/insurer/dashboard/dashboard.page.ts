@@ -36,6 +36,7 @@ interface OutcomeBar {
     <app-page-header
       title="Panel de la aseguradora"
       subtitle="Vista global de la operación"
+      [breadcrumbs]="['Aseguradora', 'Dashboard']"
     />
 
     <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-6">

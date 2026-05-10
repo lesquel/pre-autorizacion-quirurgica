@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 
 import { AuthFacade } from '../../../application/facades/auth.facade';
 import { ApiError } from '../../../../../shared/api/errors/api-error';
+import { ToastService } from '../../../../../shared/ui';
 
 @Component({
   selector: 'app-login-page',
@@ -132,6 +133,7 @@ import { ApiError } from '../../../../../shared/api/errors/api-error';
 export class LoginPage {
   private readonly auth = inject(AuthFacade);
   private readonly router = inject(Router);
+  private readonly toasts = inject(ToastService);
 
   /** Cuentas demo: un clic dispara login completo. */
   protected readonly demos = [
@@ -166,11 +168,14 @@ export class LoginPage {
     this.auth.login(email, password).subscribe({
       next: (user) => {
         this.loading.set(false);
+        this.toasts.success(`Bienvenido, ${user.name || user.email}.`);
         void this.router.navigate([`/${user.role}`]);
       },
       error: (err: unknown) => {
         this.loading.set(false);
-        this.error.set(this.formatLoginError(err));
+        const msg = this.formatLoginError(err);
+        this.error.set(msg);
+        this.toasts.error(msg);
       },
     });
   }

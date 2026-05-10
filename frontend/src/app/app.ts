@@ -1,6 +1,6 @@
 import { Component, DestroyRef, effect, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router } from '@angular/router';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
 import { RoleService } from './core/services/role.service';
@@ -8,6 +8,8 @@ import { TourService } from './core/services/tour.service';
 import { Role } from './core/types/role';
 import { ShellLayout } from './layouts/shell-layout/shell-layout';
 import { AuthFacade } from './features/auth/application/facades/auth.facade';
+import { ToastContainer } from './shared/ui/toast/toast-container';
+import { ConfirmDialog } from './shared/ui/confirm-dialog/confirm-dialog';
 import { HttpCaseRepository } from './features/authorization-cases/infrastructure/repos/http-case.repository';
 import { HttpPolicyRepository } from './features/policies/infrastructure/repos/http-policy.repository';
 import { HttpCoverageRepository } from './features/policies/infrastructure/repos/http-coverage.repository';
@@ -17,26 +19,24 @@ import { HttpProcedureRepository } from './shared/infrastructure/repos/http-proc
 const ROLE_PREFIXES = ['hospital', 'insurer', 'auditor'] as const satisfies readonly Role[];
 
 /**
- * Root de la app. Solo monta el ShellLayout (que contiene topbar + sidenav +
- * router-outlet) y mantiene la sincronización bidireccional entre el RoleService
- * y la URL.
+ * Root de la app. Monta condicionalmente el ShellLayout (cuando hay sesión
+ * autenticada) o un router-outlet plano (login). Además sincroniza la URL
+ * con el RoleService para que `RoleService.role()` refleje el prefijo activo.
  *
- * - Cuando el rol cambia (vía TopBar), navegamos a `/<role>`.
- * - Cuando la URL cambia (entrada manual o navegación interna), reflejamos
- *   el rol en el RoleService.
- *
- * El loop está cortado por las dos guardas `=== role` antes de cada acción.
+ * El rol logueado es la fuente de verdad — viene del JWT y se valida en el
+ * `authGuard`. La URL → RoleService es solo informativa; no permite cambiar
+ * de rol (no role-switcher) — para eso, logout + re-login con otra cuenta.
  */
 @Component({
   selector: 'app-root',
-  imports: [ShellLayout],
+  imports: [ShellLayout, RouterOutlet, ToastContainer, ConfirmDialog],
   templateUrl: './app.html',
 })
 export class App {
   private readonly roleService = inject(RoleService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly auth = inject(AuthFacade);
+  protected readonly auth = inject(AuthFacade);
   private readonly tour = inject(TourService);
   private readonly caseRepo = inject(HttpCaseRepository);
   private readonly policyRepo = inject(HttpPolicyRepository);
@@ -48,6 +48,8 @@ export class App {
 
   constructor() {
     // URL → Role: cuando navegamos, sync el rol activo en el service.
+    // (Solo informativo — el authGuard se asegura de que el segment matchee
+    // el rol logueado, así que esto solo refleja la URL en RoleService.)
     this.router.events
       .pipe(
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -59,15 +61,6 @@ export class App {
           this.roleService.set(segment);
         }
       });
-
-    // Role → URL: cuando el rol cambia (TopBar click), navegamos al rol.
-    effect(() => {
-      const role = this.roleService.role();
-      const currentRolePath = this.router.url.split('/')[1];
-      if (currentRolePath !== role) {
-        void this.router.navigate(['/', role]);
-      }
-    });
 
     // After auth, bootstrap the read-only caches in parallel.
     effect(() => {

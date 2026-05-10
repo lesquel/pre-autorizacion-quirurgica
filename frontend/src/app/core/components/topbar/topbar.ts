@@ -4,33 +4,36 @@ import {
   computed,
   inject,
 } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { AuthFacade } from '../../../features/auth/application/facades/auth.facade';
-import { Segmented, type SegmentedOption } from '../../../shared/ui/segmented/segmented';
-import { LayoutService } from '../../services/layout.service';
-import { RoleService } from '../../services/role.service';
-import { TourService } from '../../services/tour.service';
 import type { Role } from '../../types/role';
+import { LayoutService } from '../../services/layout.service';
+import { TourService } from '../../services/tour.service';
 import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
 
+const ROLE_LABELS: Record<Role, string> = {
+  hospital: 'Hospital',
+  insurer: 'Aseguradora',
+  auditor: 'Auditor',
+};
+
 /**
- * TopBar — barra superior fija de la app.
+ * TopBar — barra superior fija de la app autenticada.
  *
- * Desktop (lg+): grid de 3 columnas
- *   - Izquierda: hamburger (oculto), brand mark + texto "PRE-AUTH" en mono.
- *   - Centro: role switcher segmentado con 3 opciones (Hospital/Aseguradora/Auditor).
- *   - Derecha: SSE indicator + tour button + dark/light toggle.
+ * Layout:
+ *   - Izquierda: hamburger (mobile) + brand mark + "PRE-AUTH".
+ *   - Centro: identidad de sesión ("Sesión: Hospital — user@demo.com").
+ *   - Derecha: SSE indicator + tour + dark/light toggle + logout.
  *
- * Mobile (< lg): grid compacto
- *   - Hamburger button visible (toggle del sidenav drawer).
- *   - Brand reducido (solo mark + "PRE-AUTH" en pantallas algo anchas).
- *   - Role switcher con labels más cortos (H/A/V) — fits en 320px wide.
- *   - SSE indicator oculto (no aporta en mobile).
+ * El rol es derivado de la sesión (`AuthFacade.role`) — no hay role-switcher
+ * porque cada usuario tiene un rol fijo definido por su JWT. Para "cambiar de
+ * rol" hay que cerrar sesión y volver a entrar con otra cuenta demo.
  */
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [Segmented, DarkLightToggle],
+  imports: [DarkLightToggle],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <header
@@ -46,7 +49,6 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
           aria-label="Abrir menú"
           (click)="layout.toggleSidenav()"
         >
-          <!-- Hamburger SVG (3 líneas). cambia a X cuando está abierto. -->
           @if (layout.sidenavOpen()) {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -68,16 +70,27 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
         <span class="hidden sm:inline">PRE-AUTH</span>
       </div>
 
-      <!-- Centro: role switcher. Labels cortos en mobile, completos en sm+. -->
+      <!-- Centro: identidad de sesión -->
       <div class="flex justify-center min-w-0">
-        <app-segmented
-          [options]="roleOptions()"
-          [value]="currentRole()"
-          (valueChange)="onRoleChange($event)"
-        />
+        <div
+          class="inline-flex items-center gap-2 sm:gap-3 px-3 py-1 border border-line dark:border-ink-3 bg-bg-2 dark:bg-ink-2 max-w-full"
+          title="Sesión actual"
+        >
+          <span class="font-mono text-[10px] uppercase tracking-wider text-ink-4 dark:text-ink-5 shrink-0">
+            Sesión
+          </span>
+          <span class="font-mono text-[11px] uppercase tracking-wider text-ink dark:text-bg shrink-0">
+            {{ roleLabel() }}
+          </span>
+          @if (userEmail(); as email) {
+            <span class="hidden md:inline font-mono text-[11px] text-ink-3 dark:text-ink-5 truncate">
+              · {{ email }}
+            </span>
+          }
+        </div>
       </div>
 
-      <!-- Derecha: SSE (oculto en mobile) + tour + dark toggle -->
+      <!-- Derecha: SSE + tour + dark toggle + logout -->
       <div class="flex items-center gap-2 sm:gap-3">
         <span
           class="hidden md:inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-3 dark:text-ink-5"
@@ -100,40 +113,36 @@ import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
           ?
         </button>
         <app-dark-light-toggle />
+        <button
+          type="button"
+          class="hidden sm:inline-flex items-center px-3 py-1.5 border border-line dark:border-ink-3 text-ink-3 dark:text-ink-5 hover:text-ink dark:hover:text-bg hover:border-ink-4 transition-colors font-mono text-[10px] uppercase tracking-wider"
+          (click)="onLogout()"
+          title="Cerrar sesión"
+        >
+          Salir
+        </button>
       </div>
     </header>
   `,
 })
 export class Topbar {
-  private readonly roleService = inject(RoleService);
   private readonly tourService = inject(TourService);
   private readonly auth = inject(AuthFacade);
+  private readonly router = inject(Router);
   protected readonly layout = inject(LayoutService);
 
-  /**
-   * Labels cambian según viewport:
-   *   - mobile (< sm 640px): iniciales 'H' / 'A' / 'V' (fits en 320px wide).
-   *   - sm+: labels completos.
-   *
-   * Implementamos esto con dos signals + `responsive()` derivado, pero como
-   * Angular templates no tienen media queries inline, usamos clases CSS para
-   * mostrar/ocultar las labels — el Segmented recibe siempre el label completo
-   * y dejamos que CSS truncate visualmente. Más simple y sin duplicar lógica.
-   */
-  protected readonly roleOptions = computed<SegmentedOption[]>(() => [
-    { value: 'hospital', label: 'Hospital' },
-    { value: 'insurer', label: 'Aseguradora' },
-    { value: 'auditor', label: 'Auditor' },
-  ]);
-
-  protected readonly currentRole = computed<string>(() => this.roleService.role());
+  protected readonly roleLabel = computed<string>(() => ROLE_LABELS[this.auth.role()]);
+  protected readonly userEmail = computed<string | null>(
+    () => this.auth.currentUser()?.email ?? null,
+  );
   protected readonly tourActive = this.tourService.active;
-
-  protected onRoleChange(value: string): void {
-    this.roleService.set(value as Role);
-  }
 
   protected onStartTour(): void {
     void this.tourService.start({ userId: this.auth.currentUser()?.id ?? null });
+  }
+
+  protected onLogout(): void {
+    this.auth.logout();
+    void this.router.navigate(['/login']);
   }
 }

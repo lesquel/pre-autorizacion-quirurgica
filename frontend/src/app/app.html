@@ -1,1 +1,8 @@
-<app-shell-layout />
+@if (auth.isAuthenticated()) {
+  <app-shell-layout />
+} @else {
+  <router-outlet />
+}
+
+<app-toast-container />
+<app-confirm-dialog />

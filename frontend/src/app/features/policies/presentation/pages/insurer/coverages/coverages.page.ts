@@ -30,6 +30,7 @@ interface EditableCoverage {
     <app-page-header
       title="Coberturas"
       subtitle="Edición masiva por póliza · reemplazo atómico al guardar."
+      [breadcrumbs]="['Aseguradora', 'Coberturas']"
     />
 
     <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-4">

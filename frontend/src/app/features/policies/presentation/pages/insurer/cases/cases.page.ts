@@ -20,6 +20,7 @@ import { CaseTable } from '../../../../../authorization-cases/presentation/compo
     <app-page-header
       title="Casos"
       subtitle="Vista global de pre-autorizaciones"
+      [breadcrumbs]="['Aseguradora', 'Casos']"
     />
 
     <section class="px-0 py-4 lg:px-7 lg:py-6">

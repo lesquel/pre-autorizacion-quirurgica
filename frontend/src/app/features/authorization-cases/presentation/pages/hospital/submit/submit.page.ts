@@ -28,6 +28,7 @@ import {
 } from '../../../components/scenario-picker/scenario-picker';
 import type { MedicalReport } from '../../../../domain/entities/medical-report';
 import { ApiError } from '../../../../../../shared/api/errors/api-error';
+import { ToastService } from '../../../../../../shared/ui';
 
 const SCENARIO_META: Readonly<
   Record<DemoScenarioKey, { description: string; expectedOutcome: Outcome }>
@@ -198,6 +199,7 @@ export class HospitalSubmitPage {
   private readonly facade = inject(AuthorizationCasesFacade);
   private readonly router = inject(Router);
   private readonly extractApi = inject(DocumentExtractService);
+  private readonly toasts = inject(ToastService);
 
   protected readonly prefill = signal<MedicalReportFormPrefill | undefined>(undefined);
   protected readonly submitting = signal(false);
@@ -352,6 +354,7 @@ export class HospitalSubmitPage {
       file: input.file,
     });
 
+    this.toasts.success('Caso enviado. Siguiendo la corrida del agente…');
     void this.router.navigate(['/hospital/live-run']).finally(() => {
       this.submitting.set(false);
     });

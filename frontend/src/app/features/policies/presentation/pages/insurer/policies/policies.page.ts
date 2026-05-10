@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 
 import { PageHeader } from '../../../../../../core/components';
-import { Pill } from '../../../../../../shared/ui';
+import { ConfirmDialogService, Pill, ToastService } from '../../../../../../shared/ui';
 import type { Insurer, Policy } from '../../../../domain/entities';
 import { PoliciesFacade } from '../../../../application/facades/policies.facade';
 import { PolicyFormComponent } from './policy-form.component';
@@ -28,7 +28,11 @@ interface PolicyRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [PageHeader, Pill, PolicyFormComponent],
   template: `
-    <app-page-header title="Pólizas" subtitle="Gestión de pólizas" />
+    <app-page-header
+      title="Pólizas"
+      subtitle="Gestión de pólizas"
+      [breadcrumbs]="['Aseguradora', 'Pólizas']"
+    />
 
     <section class="px-0 py-4 lg:px-7 lg:py-6 flex flex-col gap-4">
       <div class="flex justify-end">
@@ -129,6 +133,8 @@ interface PolicyRow {
 })
 export class InsurerPoliciesPage {
   private readonly facade = inject(PoliciesFacade);
+  private readonly toasts = inject(ToastService);
+  private readonly confirm = inject(ConfirmDialogService);
 
   /**
    * Pre-resolvemos un mapa `insurerId → name` para que el join sea O(1) por
@@ -184,8 +190,10 @@ export class InsurerPoliciesPage {
       const isEdit = this.editing() !== null;
       if (isEdit) {
         await this.facade.updatePolicy(p);
+        this.toasts.success(`Póliza ${p.number} actualizada.`);
       } else {
         await this.facade.createPolicy(p);
+        this.toasts.success(`Póliza ${p.number} creada.`);
       }
       this.close();
     } catch (err) {
@@ -196,13 +204,20 @@ export class InsurerPoliciesPage {
   }
 
   protected async onDelete(p: Policy): Promise<void> {
-    if (typeof window !== 'undefined' && !window.confirm(`Eliminar póliza ${p.number}?`)) {
+    const accepted = await this.confirm.ask({
+      title: `Eliminar póliza ${p.number}?`,
+      message: `Se eliminará la póliza del plan ${p.plan}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!accepted) {
       return;
     }
     try {
       await this.facade.deletePolicy(p.number);
+      this.toasts.success(`Póliza ${p.number} eliminada.`);
     } catch (err) {
-      console.error('Failed to delete policy', err);
+      this.toasts.error(err instanceof Error ? err.message : 'No se pudo eliminar la póliza.');
     }
   }
 
