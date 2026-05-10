@@ -2,10 +2,83 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Frontend</title>
   <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- ── Title + descripción ─────────────────────────────────────────── -->
+  <title>Pre-Autorización Quirúrgica · Agente IA en segundos</title>
+  <meta name="description"
+        content="Agente IA que pre-autoriza cirugías en segundos: valida cobertura, carencia y documentación; escala a auditor humano cuando duda. Nunca auto-rechaza por diseño.">
+  <meta name="author" content="Pre-Autorización Quirúrgica">
+  <meta name="keywords"
+        content="pre-autorización quirúrgica, agente IA, autorización médica, salud, seguros, hospital, FastAPI, LangGraph, Angular">
+
+  <!-- ── Viewport / theme / color scheme ─────────────────────────────── -->
+  <!-- viewport-fit=cover para iPhone notch; user-scalable=yes (accesibilidad). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- theme-color: barra del navegador en mobile. Dos valores: light y dark. -->
+  <meta name="theme-color" content="#FAFAF7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14130F" media="(prefers-color-scheme: dark)">
+  <!-- Permite a Chrome/Safari saber que la app soporta ambos schemes (mejora UA stylesheet). -->
+  <meta name="color-scheme" content="light dark">
+
+  <!-- ── Robots / canonical ──────────────────────────────────────────── -->
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://pre-autorizacion-quirurgica.vercel.app/">
+
+  <!-- ── Icons (SVG primero — escala perfecto; .ico como fallback) ───── -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- Apple touch icon: iOS 17+ acepta SVG; en versiones anteriores cae al .ico. -->
+  <link rel="apple-touch-icon" href="favicon.svg">
+  <!-- Manifest: PWA-ish (theme color, name corto, icons, scope). -->
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- ── Open Graph (Facebook / LinkedIn / Slack / WhatsApp / Discord) ─ -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Pre-Autorización Quirúrgica">
+  <meta property="og:title" content="Pre-Autorización Quirúrgica · Agente IA en segundos">
+  <meta property="og:description"
+        content="Agente IA que pre-autoriza cirugías en segundos: valida cobertura, carencia y documentación; escala a auditor humano cuando duda. Nunca auto-rechaza por diseño.">
+  <meta property="og:url" content="https://pre-autorizacion-quirurgica.vercel.app/">
+  <meta property="og:locale" content="es_AR">
+  <!-- og:image apunta al PNG que el operador genera en frontend/public/og-image.png
+       (1200×630, ver DEPLOY.md). Mientras tanto, las plataformas que aceptan SVG
+       (Twitter, algunos clientes) usan el favicon como fallback decente. -->
+  <meta property="og:image" content="https://pre-autorizacion-quirurgica.vercel.app/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Pre-Autorización Quirúrgica — Agente IA con outcomes APPROVED_AUTO, NEEDS_DOCS, ESCALATED.">
+
+  <!-- ── Twitter Card ────────────────────────────────────────────────── -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pre-Autorización Quirúrgica · Agente IA en segundos">
+  <meta name="twitter:description"
+        content="Agente IA que pre-autoriza cirugías en segundos. Valida cobertura, carencia y documentación; escala a auditor humano cuando duda. Nunca auto-rechaza por diseño.">
+  <meta name="twitter:image" content="https://pre-autorizacion-quirurgica.vercel.app/og-image.png">
+  <meta name="twitter:image:alt" content="Pre-Autorización Quirúrgica — Agente IA.">
+
+  <!-- ── Format detection (evita que iOS Safari convierta números en links a llamar) ── -->
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- ── JSON-LD: SoftwareApplication (rich snippet para Google) ─────── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Pre-Autorización Quirúrgica",
+    "alternateName": "Pre-Auth",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Web",
+    "url": "https://pre-autorizacion-quirurgica.vercel.app/",
+    "description": "Agente IA que pre-autoriza cirugías en segundos: valida cobertura, carencia y documentación; escala a auditor humano cuando duda. Nunca auto-rechaza por diseño.",
+    "inLanguage": "es",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
 </head>
 <body>
   <app-root></app-root>

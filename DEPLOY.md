@@ -113,6 +113,22 @@ Angular 21 + `@angular/build` emite a `dist/frontend/browser/`.
 URL profunda (`/auditor/case/PAC-00481`) navegada directo da 404 en
 Vercel. El rewrite garantiza que el bundle de Angular maneje el routing.
 
+### Open Graph image (compartir en redes)
+
+`frontend/src/index.html` referencia `/og-image.png` (1200×630) en los meta
+tags `og:image` y `twitter:image`. Si todavía no existe, Slack/Twitter/LinkedIn
+caen al SVG favicon (no ideal pero no rompe).
+
+Para generar la imagen final:
+
+1. Mockup recomendado: fondo `#14130F` (color-ink), brand mark accent
+   `#2EA89B`, texto serif "Pre-Autorización Quirúrgica" + subtítulo
+   "Agente IA en segundos". 1200×630 px, exportá como PNG ≤ 200 KB.
+2. Guardalo en `frontend/public/og-image.png`. Vercel lo sirve directo
+   desde `/og-image.png` tras el próximo deploy.
+3. Verificá con [opengraph.xyz](https://www.opengraph.xyz/) o
+   [LinkedIn Post Inspector](https://www.linkedin.com/post-inspector/).
+
 ### Headers de seguridad
 
 `vercel.json` setea:

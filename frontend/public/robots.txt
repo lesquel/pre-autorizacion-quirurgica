@@ -1,0 +1,8 @@
+# Permitimos indexar la app pública (demo del agente de pre-autorización).
+# El backend OpenAPI vive en otro dominio (Render) y NO se referencia acá.
+User-agent: *
+Allow: /
+
+# La SPA Angular no genera URLs distintas por ruta para crawlers — todo es
+# /index.html con client-side routing. No agregamos sitemap.xml todavía
+# porque las rutas internas son protegidas por login (no indexables).

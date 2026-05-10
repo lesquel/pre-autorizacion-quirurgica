@@ -1,0 +1,26 @@
+{
+  "name": "Pre-Autorización Quirúrgica",
+  "short_name": "Pre-Auth",
+  "description": "Agente IA que pre-autoriza cirugías en segundos: valida cobertura, carencia y documentación, escala a auditor humano cuando duda. Nunca auto-rechaza por diseño.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#14130F",
+  "background_color": "#FAFAF7",
+  "lang": "es",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
