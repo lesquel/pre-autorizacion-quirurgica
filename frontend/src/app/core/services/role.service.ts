@@ -19,22 +19,17 @@ function loadInitial(): Role | null {
 /**
  * RoleService — exposes the active role to the UI.
  *
- * Source of truth is `AuthFacade.role` (derived from the JWT). The local
- * `_override` only applies when there is NO authenticated session — useful
- * for pre-login dev navigation. Once authenticated, the JWT role wins and
- * cannot be switched from the UI (no role-switcher in the topbar).
+ * Para el demo/MVP el rol activo puede diferir del rol del JWT: el usuario
+ * loguea con cualquier cuenta y el role-switcher de la topbar decide qué
+ * dashboard ver. El `_override` (persistido en localStorage) gana sobre el
+ * rol del JWT cuando está seteado. `clearOverride()` vuelve al rol del JWT.
  */
 @Injectable({ providedIn: 'root' })
 export class RoleService {
   private readonly auth = inject(AuthFacade);
   private readonly _override = signal<Role | null>(loadInitial());
 
-  readonly role = computed<Role>(() => {
-    if (this.auth.isAuthenticated()) {
-      return this.auth.role();
-    }
-    return this._override() ?? this.auth.role();
-  });
+  readonly role = computed<Role>(() => this._override() ?? this.auth.role());
 
   constructor() {
     effect(() => {

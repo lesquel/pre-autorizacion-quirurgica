@@ -20,12 +20,14 @@ const ROLE_PREFIXES = ['hospital', 'insurer', 'auditor'] as const satisfies read
 
 /**
  * Root de la app. Monta condicionalmente el ShellLayout (cuando hay sesión
- * autenticada) o un router-outlet plano (login). Además sincroniza la URL
- * con el RoleService para que `RoleService.role()` refleje el prefijo activo.
+ * autenticada) o un router-outlet plano (login). Además mantiene la
+ * sincronización bidireccional entre el RoleService y la URL:
  *
- * El rol logueado es la fuente de verdad — viene del JWT y se valida en el
- * `authGuard`. La URL → RoleService es solo informativa; no permite cambiar
- * de rol (no role-switcher) — para eso, logout + re-login con otra cuenta.
+ * - Cuando el rol cambia (vía TopBar segmented), navegamos a `/<role>`.
+ * - Cuando la URL cambia (entrada manual o navegación interna), reflejamos
+ *   el rol en el RoleService.
+ *
+ * El loop se corta con las guardas `=== role` antes de cada acción.
  */
 @Component({
   selector: 'app-root',
@@ -48,8 +50,6 @@ export class App {
 
   constructor() {
     // URL → Role: cuando navegamos, sync el rol activo en el service.
-    // (Solo informativo — el authGuard se asegura de que el segment matchee
-    // el rol logueado, así que esto solo refleja la URL en RoleService.)
     this.router.events
       .pipe(
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -61,6 +61,20 @@ export class App {
           this.roleService.set(segment);
         }
       });
+
+    // Role → URL: cuando el rol cambia (TopBar segmented click), navegamos.
+    // Solo cuando hay sesión — antes de loguear, el cambio no debe disparar
+    // navegación a una ruta protegida.
+    effect(() => {
+      const role = this.roleService.role();
+      if (!this.auth.isAuthenticated()) {
+        return;
+      }
+      const currentRolePath = this.router.url.split('/')[1];
+      if (currentRolePath !== role) {
+        void this.router.navigate(['/', role]);
+      }
+    });
 
     // After auth, bootstrap the read-only caches in parallel.
     effect(() => {

@@ -40,10 +40,10 @@ const TOUR_STEPS: readonly TourStepConfig[] = [
   {
     role: 'hospital',
     route: '/hospital/submit',
-    element: 'app-topbar header',
-    title: 'Sesión activa',
+    element: 'app-topbar app-segmented',
+    title: 'Role switcher',
     description:
-      '3 roles: <strong>Hospital</strong> sube informes, <strong>Aseguradora</strong> ve métricas globales, <strong>Auditor</strong> revisa casos escalados. Cada rol vive en su propia cuenta — para cambiar, cerrá sesión y entrá con otra cuenta demo.',
+      '3 roles: <strong>Hospital</strong> sube informes, <strong>Aseguradora</strong> ve métricas globales, <strong>Auditor</strong> revisa casos escalados.',
     side: 'bottom',
     align: 'center',
     settleMs: 200,

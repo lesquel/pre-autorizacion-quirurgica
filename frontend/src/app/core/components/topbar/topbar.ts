@@ -7,33 +7,31 @@ import {
 import { Router } from '@angular/router';
 
 import { AuthFacade } from '../../../features/auth/application/facades/auth.facade';
-import type { Role } from '../../types/role';
+import { Segmented, type SegmentedOption } from '../../../shared/ui/segmented/segmented';
 import { LayoutService } from '../../services/layout.service';
+import { RoleService } from '../../services/role.service';
 import { TourService } from '../../services/tour.service';
+import type { Role } from '../../types/role';
 import { DarkLightToggle } from '../dark-light-toggle/dark-light-toggle';
-
-const ROLE_LABELS: Record<Role, string> = {
-  hospital: 'Hospital',
-  insurer: 'Aseguradora',
-  auditor: 'Auditor',
-};
 
 /**
  * TopBar — barra superior fija de la app autenticada.
  *
- * Layout:
- *   - Izquierda: hamburger (mobile) + brand mark + "PRE-AUTH".
- *   - Centro: identidad de sesión ("Sesión: Hospital — user@demo.com").
+ * Desktop (lg+): grid de 3 columnas
+ *   - Izquierda: hamburger (oculto en lg+), brand mark + texto "PRE-AUTH".
+ *   - Centro: role switcher segmentado (Hospital/Aseguradora/Auditor).
  *   - Derecha: SSE indicator + tour + dark/light toggle + logout.
  *
- * El rol es derivado de la sesión (`AuthFacade.role`) — no hay role-switcher
- * porque cada usuario tiene un rol fijo definido por su JWT. Para "cambiar de
- * rol" hay que cerrar sesión y volver a entrar con otra cuenta demo.
+ * Mobile (< lg): hamburger visible, brand reducido, switcher con labels cortos.
+ *
+ * Para el demo/MVP, cualquier cuenta autenticada puede saltar entre los 3
+ * dashboards desde acá — no validamos rol del JWT vs URL. Cerrar sesión
+ * vuelve al /login.
  */
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [DarkLightToggle],
+  imports: [Segmented, DarkLightToggle],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <header
@@ -70,24 +68,13 @@ const ROLE_LABELS: Record<Role, string> = {
         <span class="hidden sm:inline">PRE-AUTH</span>
       </div>
 
-      <!-- Centro: identidad de sesión -->
+      <!-- Centro: role switcher (Hospital/Aseguradora/Auditor) -->
       <div class="flex justify-center min-w-0">
-        <div
-          class="inline-flex items-center gap-2 sm:gap-3 px-3 py-1 border border-line dark:border-ink-3 bg-bg-2 dark:bg-ink-2 max-w-full"
-          title="Sesión actual"
-        >
-          <span class="font-mono text-[10px] uppercase tracking-wider text-ink-4 dark:text-ink-5 shrink-0">
-            Sesión
-          </span>
-          <span class="font-mono text-[11px] uppercase tracking-wider text-ink dark:text-bg shrink-0">
-            {{ roleLabel() }}
-          </span>
-          @if (userEmail(); as email) {
-            <span class="hidden md:inline font-mono text-[11px] text-ink-3 dark:text-ink-5 truncate">
-              · {{ email }}
-            </span>
-          }
-        </div>
+        <app-segmented
+          [options]="roleOptions()"
+          [value]="currentRole()"
+          (valueChange)="onRoleChange($event)"
+        />
       </div>
 
       <!-- Derecha: SSE + tour + dark toggle + logout -->
@@ -102,6 +89,14 @@ const ROLE_LABELS: Record<Role, string> = {
           ></span>
           SSE
         </span>
+        @if (userEmail(); as email) {
+          <span
+            class="hidden lg:inline font-mono text-[11px] text-ink-3 dark:text-ink-5 truncate max-w-[200px]"
+            [title]="email"
+          >
+            {{ email }}
+          </span>
+        }
         <button
           type="button"
           class="inline-grid place-items-center w-7 h-7 border border-line dark:border-ink-3 text-ink-3 dark:text-ink-5 hover:text-ink dark:hover:text-bg hover:border-ink-4 transition-colors font-mono text-[12px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
@@ -126,16 +121,27 @@ const ROLE_LABELS: Record<Role, string> = {
   `,
 })
 export class Topbar {
+  private readonly roleService = inject(RoleService);
   private readonly tourService = inject(TourService);
   private readonly auth = inject(AuthFacade);
   private readonly router = inject(Router);
   protected readonly layout = inject(LayoutService);
 
-  protected readonly roleLabel = computed<string>(() => ROLE_LABELS[this.auth.role()]);
+  protected readonly roleOptions = computed<SegmentedOption[]>(() => [
+    { value: 'hospital', label: 'Hospital' },
+    { value: 'insurer', label: 'Aseguradora' },
+    { value: 'auditor', label: 'Auditor' },
+  ]);
+
+  protected readonly currentRole = computed<string>(() => this.roleService.role());
   protected readonly userEmail = computed<string | null>(
     () => this.auth.currentUser()?.email ?? null,
   );
   protected readonly tourActive = this.tourService.active;
+
+  protected onRoleChange(value: string): void {
+    this.roleService.set(value as Role);
+  }
 
   protected onStartTour(): void {
     void this.tourService.start({ userId: this.auth.currentUser()?.id ?? null });
@@ -143,6 +149,7 @@ export class Topbar {
 
   protected onLogout(): void {
     this.auth.logout();
+    this.roleService.clearOverride();
     void this.router.navigate(['/login']);
   }
 }
