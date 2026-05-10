@@ -132,7 +132,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 # Probe barato: instanciar el repo de cases. Si las creds están
                 # mal, esto explota acá y no en el primer request real.
-                _ = get_case_repository(cfg)
+                # NOTA: get_case_repository ya no recibe parámetros — lee
+                # Settings internamente vía get_settings() para que
+                # @lru_cache pueda cachear (Settings no es hashable).
+                _ = get_case_repository()
                 checks["notion"] = "configured"
             except Exception as exc:  # noqa: BLE001 — best-effort.
                 checks["notion"] = f"error: {exc}"

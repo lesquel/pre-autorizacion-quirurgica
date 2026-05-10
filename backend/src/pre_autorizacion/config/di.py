@@ -124,16 +124,15 @@ class _NullVisionExtractor(VisionExtractor):
 
 
 @lru_cache(maxsize=1)
-def get_user_repository(settings: Settings | None = None) -> UserRepository:
+def get_user_repository() -> UserRepository:
     """Repositorio de usuarios — in-memory en MVP."""
-    _ = settings or get_settings()
     return InMemoryUserStore()
 
 
 @lru_cache(maxsize=1)
-def get_jwt_service(settings: Settings | None = None) -> JwtService:
+def get_jwt_service() -> JwtService:
     """JwtService configurado con el secret + TTLs + issuer/audience de Settings."""
-    s = settings or get_settings()
+    s = get_settings()
     return JwtService(
         secret=s.jwt_secret,
         algorithm=s.jwt_algorithm,
@@ -145,9 +144,9 @@ def get_jwt_service(settings: Settings | None = None) -> JwtService:
 
 
 @lru_cache(maxsize=1)
-def get_file_storage(settings: Settings | None = None) -> FileStorage:
+def get_file_storage() -> FileStorage:
     """`LocalFsAdapter` apuntando a `settings.uploads_dir`."""
-    s = settings or get_settings()
+    s = get_settings()
     # El adapter lo crea el sub-agente B2D. Import diferido para tolerar la
     # ventana en la que el archivo aún no existe (la app siempre levanta).
     from pre_autorizacion.shared.storage.adapters.local_fs_adapter import (  # noqa: PLC0415
@@ -159,9 +158,9 @@ def get_file_storage(settings: Settings | None = None) -> FileStorage:
 
 
 @lru_cache(maxsize=1)
-def get_policy_repository(settings: Settings | None = None) -> PolicyRepository:
+def get_policy_repository() -> PolicyRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_policies:
         from pre_autorizacion.features.policies.infrastructure.repos.notion_policy import (  # noqa: PLC0415
             NotionPolicyRepository,
@@ -178,9 +177,9 @@ def get_policy_repository(settings: Settings | None = None) -> PolicyRepository:
 
 
 @lru_cache(maxsize=1)
-def get_coverage_repository(settings: Settings | None = None) -> CoverageRepository:
+def get_coverage_repository() -> CoverageRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_coverages:
         from pre_autorizacion.features.policies.infrastructure.repos.notion_coverage import (  # noqa: PLC0415
             NotionCoverageRepository,
@@ -197,9 +196,9 @@ def get_coverage_repository(settings: Settings | None = None) -> CoverageReposit
 
 
 @lru_cache(maxsize=1)
-def get_insurer_repository(settings: Settings | None = None) -> InsurerRepository:
+def get_insurer_repository() -> InsurerRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_insurers:
         from pre_autorizacion.features.policies.infrastructure.repos.notion_insurer import (  # noqa: PLC0415
             NotionInsurerRepository,
@@ -216,9 +215,9 @@ def get_insurer_repository(settings: Settings | None = None) -> InsurerRepositor
 
 
 @lru_cache(maxsize=1)
-def get_case_repository(settings: Settings | None = None) -> CaseRepository:
+def get_case_repository() -> CaseRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_authorization_cases:
         from pre_autorizacion.features.authorization_cases.infrastructure.persistence.notion.notion_case import (  # noqa: PLC0415
             NotionCaseRepository,
@@ -239,9 +238,9 @@ def get_case_repository(settings: Settings | None = None) -> CaseRepository:
 
 
 @lru_cache(maxsize=1)
-def get_patient_repository(settings: Settings | None = None) -> PatientRepository:
+def get_patient_repository() -> PatientRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_patients:
         from pre_autorizacion.shared.infrastructure.repos.notion_patient import (  # noqa: PLC0415
             NotionPatientRepository,
@@ -258,9 +257,9 @@ def get_patient_repository(settings: Settings | None = None) -> PatientRepositor
 
 
 @lru_cache(maxsize=1)
-def get_procedure_repository(settings: Settings | None = None) -> ProcedureRepository:
+def get_procedure_repository() -> ProcedureRepository:
     """Notion si hay token + db id; in-memory en otro caso."""
-    s = settings or get_settings()
+    s = get_settings()
     if s.use_notion and s.notion_db_procedures:
         from pre_autorizacion.features.procedures.infrastructure.repos.notion_procedure import (  # noqa: PLC0415
             NotionProcedureRepository,
@@ -277,14 +276,14 @@ def get_procedure_repository(settings: Settings | None = None) -> ProcedureRepos
 
 
 @lru_cache(maxsize=1)
-def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
+def get_llm_provider() -> LLMProvider:
     """LLM provider — DeepSeek (default) cuando hay API key, sino `_NullLLMProvider`.
 
     Wired in B3: si `settings.text_provider == "deepseek"` y hay api key,
     devuelve `DeepSeekLLMAdapter`. OpenAI/Anthropic quedan pendientes hasta
     que haya adapters concretos para ellos.
     """
-    s = settings or get_settings()
+    s = get_settings()
     if s.text_provider == "deepseek" and s.deepseek_api_key:
         from pre_autorizacion.shared.llm.adapters.deepseek_adapter import (  # noqa: PLC0415
             DeepSeekLLMAdapter,
@@ -299,13 +298,13 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
 
 
 @lru_cache(maxsize=1)
-def get_vision_extractor(settings: Settings | None = None) -> VisionExtractor:
+def get_vision_extractor() -> VisionExtractor:
     """Vision extractor — Gemini (default) cuando hay API key, sino `_NullVisionExtractor`.
 
     Wired in B3: si `settings.vision_provider == "gemini"` y hay
     `google_api_key`, devuelve `GeminiVisionAdapter`.
     """
-    s = settings or get_settings()
+    s = get_settings()
     if s.vision_provider == "gemini" and s.google_api_key:
         from pre_autorizacion.shared.vision.adapters.gemini_adapter import (  # noqa: PLC0415
             GeminiVisionAdapter,
@@ -319,9 +318,9 @@ def get_vision_extractor(settings: Settings | None = None) -> VisionExtractor:
 
 
 @lru_cache(maxsize=1)
-def get_text_extractor(settings: Settings | None = None) -> MedicalReportExtractor:
+def get_text_extractor() -> MedicalReportExtractor:
     """Extractor high-level para informes en TEXTO (compone `LLMProvider`)."""
-    _ = settings or get_settings()
+    _ = get_settings()
     from pre_autorizacion.features.authorization_cases.infrastructure.extractors.text_extractor import (  # noqa: PLC0415
         TextMedicalReportExtractor,
     )
@@ -330,9 +329,9 @@ def get_text_extractor(settings: Settings | None = None) -> MedicalReportExtract
 
 
 @lru_cache(maxsize=1)
-def get_pdf_extractor(settings: Settings | None = None) -> MedicalReportExtractor:
+def get_pdf_extractor() -> MedicalReportExtractor:
     """Extractor high-level para informes en PDF (compone `VisionExtractor` + storage)."""
-    s = settings or get_settings()
+    s = get_settings()
     from pre_autorizacion.features.authorization_cases.infrastructure.extractors.pdf_extractor import (  # noqa: PLC0415
         PdfMedicalReportExtractor,
     )
@@ -349,9 +348,9 @@ def get_pdf_extractor(settings: Settings | None = None) -> MedicalReportExtracto
 
 
 @lru_cache(maxsize=1)
-def get_decision_maker(settings: Settings | None = None) -> AuthorizationDecisionMaker:
+def get_decision_maker() -> AuthorizationDecisionMaker:
     """`AuthorizationDecisionMaker` LLM-based (compone `LLMProvider`)."""
-    s = settings or get_settings()
+    s = get_settings()
     from pre_autorizacion.features.authorization_cases.infrastructure.decision.llm_decision_maker import (  # noqa: PLC0415
         LlmAuthorizationDecisionMaker,
     )
@@ -363,9 +362,9 @@ def get_decision_maker(settings: Settings | None = None) -> AuthorizationDecisio
 
 
 @lru_cache(maxsize=1)
-def get_response_generator(settings: Settings | None = None) -> ResponseGenerator:
+def get_response_generator() -> ResponseGenerator:
     """`ResponseGenerator` LLM-based (compone `LLMProvider`)."""
-    s = settings or get_settings()
+    s = get_settings()
     from pre_autorizacion.features.authorization_cases.infrastructure.decision.llm_response_generator import (  # noqa: PLC0415
         LlmResponseGenerator,
     )
@@ -374,7 +373,7 @@ def get_response_generator(settings: Settings | None = None) -> ResponseGenerato
 
 
 @lru_cache(maxsize=1)
-def get_agent_orchestrator(settings: Settings | None = None) -> AgentOrchestrator | None:
+def get_agent_orchestrator() -> AgentOrchestrator | None:
     """`AgentOrchestrator` LangGraph-based.
 
     Devuelve `None` cuando NO hay credenciales LLM/Vision configuradas — el
@@ -387,7 +386,7 @@ def get_agent_orchestrator(settings: Settings | None = None) -> AgentOrchestrato
       orchestrator: el grafo solo invoca al pdf_extractor cuando llega un
       report PDF. Reports en texto siguen funcionando con texto solo.
     """
-    s = settings or get_settings()
+    s = get_settings()
 
     # Sin LLM de texto el grafo no puede correr el nodo `make_decision`.
     has_text_key = bool(
