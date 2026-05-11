@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Pre-Autorización Quirúrgica — Agente IA en segundos">
+  <title>Pre-Autorización Quirúrgica — Agente IA en segundos</title>
+  <!--
+    OG image 1200×630 (relación 1.9:1 — la que sirve para Twitter, Slack,
+    Discord, WhatsApp, iMessage). Fondo color-ink, brand mark accent,
+    título serif + subtítulo mono. Coordenadas alineadas al design system
+    del topbar (ver core/components/topbar/topbar.ts).
+
+    Nota: SVG funciona en Twitter, Slack, Discord, iMessage. LinkedIn y
+    Facebook prefieren PNG/JPG — para llegar a esos también, convertí
+    este SVG a PNG con `npx svgexport og-image.svg og-image.png 1200:630`
+    o cualquier conversor web. Una vez generado el PNG, los meta tags
+    en src/index.html ya apuntan a `/og-image.png`.
+  -->
+
+  <!-- fondo -->
+  <rect width="1200" height="630" fill="#14130F"/>
+
+  <!-- borde sutil interno -->
+  <rect x="40" y="40" width="1120" height="550" fill="none" stroke="#3A3833" stroke-width="1"/>
+
+  <!-- brand mark — replica el del topbar, escalado a 56×56 -->
+  <g transform="translate(80, 80)">
+    <rect width="56" height="56" rx="10" fill="#FAFAF7"/>
+    <rect x="20" y="20" width="16" height="16" fill="#2EA89B"/>
+  </g>
+
+  <!-- brand wordmark (mono) -->
+  <text x="160" y="120" font-family="'JetBrains Mono', ui-monospace, monospace"
+        font-size="14" fill="#9C998F" letter-spacing="3" font-weight="500">
+    PRE-AUTH · PRE-AUTORIZACIÓN QUIRÚRGICA
+  </text>
+
+  <!-- título serif principal -->
+  <text x="80" y="280" font-family="'Newsreader', Georgia, serif"
+        font-size="80" fill="#FAFAF7" font-weight="600" letter-spacing="-1.5">
+    Agente IA que pre-autoriza
+  </text>
+  <text x="80" y="370" font-family="'Newsreader', Georgia, serif"
+        font-size="80" fill="#FAFAF7" font-weight="600" letter-spacing="-1.5">
+    cirugías en
+    <tspan fill="#2EA89B">segundos.</tspan>
+  </text>
+
+  <!-- bullets — 3 outcomes del PRD §3.1.3 -->
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="16"
+     fill="#C8C5BA" letter-spacing="1.5">
+    <!-- check mark + APPROVED_AUTO -->
+    <g transform="translate(80, 460)">
+      <circle cx="6" cy="-6" r="3" fill="#2EA89B"/>
+      <text x="20" y="0">APPROVED_AUTO · auto-aprobado</text>
+    </g>
+    <g transform="translate(80, 495)">
+      <circle cx="6" cy="-6" r="3" fill="#D8A93C"/>
+      <text x="20" y="0">NEEDS_DOCS · docs faltantes</text>
+    </g>
+    <g transform="translate(80, 530)">
+      <circle cx="6" cy="-6" r="3" fill="#C0533A"/>
+      <text x="20" y="0">ESCALATED · auditor humano</text>
+    </g>
+  </g>
+
+  <!-- tagline / firma derecha -->
+  <text x="1120" y="555" font-family="'JetBrains Mono', ui-monospace, monospace"
+        font-size="12" fill="#6B6962" text-anchor="end" letter-spacing="1.5">
+    NUNCA AUTO-RECHAZA POR DISEÑO · PRD §3.1.3
+  </text>
+</svg>

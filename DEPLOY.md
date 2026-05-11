@@ -115,19 +115,32 @@ Vercel. El rewrite garantiza que el bundle de Angular maneje el routing.
 
 ### Open Graph image (compartir en redes)
 
-`frontend/src/index.html` referencia `/og-image.png` (1200×630) en los meta
-tags `og:image` y `twitter:image`. Si todavía no existe, Slack/Twitter/LinkedIn
-caen al SVG favicon (no ideal pero no rompe).
+`frontend/public/og-image.svg` está commiteado con la imagen 1200×630
+(brand mark + título serif + 3 outcomes del PRD). Los meta tags
+`og:image` y `twitter:image` en `src/index.html` apuntan a ese SVG.
 
-Para generar la imagen final:
+**Cobertura actual** (SVG):
+- ✓ Twitter / X
+- ✓ Slack
+- ✓ Discord
+- ✓ iMessage
+- ✗ Facebook (requiere PNG/JPG)
+- ✗ LinkedIn (requiere PNG/JPG)
 
-1. Mockup recomendado: fondo `#14130F` (color-ink), brand mark accent
-   `#2EA89B`, texto serif "Pre-Autorización Quirúrgica" + subtítulo
-   "Agente IA en segundos". 1200×630 px, exportá como PNG ≤ 200 KB.
-2. Guardalo en `frontend/public/og-image.png`. Vercel lo sirve directo
-   desde `/og-image.png` tras el próximo deploy.
-3. Verificá con [opengraph.xyz](https://www.opengraph.xyz/) o
-   [LinkedIn Post Inspector](https://www.linkedin.com/post-inspector/).
+**Para cubrir también LinkedIn y Facebook**: convertí el SVG a PNG.
+Una forma rápida:
+
+```sh
+cd frontend/public
+npx svgexport og-image.svg og-image.png 1200:630
+```
+
+Después actualizá `frontend/src/index.html` cambiando los 2 valores
+de `og:image` y `twitter:image` de `og-image.svg` → `og-image.png`
+(y borrá el meta `og:image:type` que indica `image/svg+xml`).
+
+**Verificá** con [opengraph.xyz](https://www.opengraph.xyz/) o
+[LinkedIn Post Inspector](https://www.linkedin.com/post-inspector/).
 
 ### Headers de seguridad
 

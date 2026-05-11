@@ -122,17 +122,24 @@ const TOUR_STEPS: readonly TourStepConfig[] = [
 ];
 
 /**
- * Prefijo común del flag "ya vi el tour". Se concatena con el `userId` para
- * que cada usuario tenga su propio flag (issue M3 del adversarial review:
- * shared workstation no debe heredar el flag del usuario anterior).
+ * Flag global "ya vi el tour en este browser".
+ *
+ * Decisión UX (priorizada sobre el scoping por user-id):
+ * - El tour se auto-dispara UNA sola vez por navegador. Si el operador
+ *   cambia de rol con el segmented (Hospital ↔ Aseguradora ↔ Auditor)
+ *   NO debe re-disparar — sería molesto en una demo en vivo.
+ * - El botón "?" del topbar siempre re-abre el tour manualmente.
+ * - El usuario puede limpiar el flag desde DevTools con
+ *   `localStorage.removeItem('preauth.tour.seen')` si quiere ver el tour
+ *   de nuevo sin recurrir a `resetSeenFlag()`.
+ *
+ * Antes este flag se scopeaba por user-id (`preauth.tour.seen.<id>`) para
+ * shared workstations, pero el role switcher generaba flags distintos por
+ * cada user demo (hospital/insurer/auditor) y el tour reaparecía. Reverto
+ * al flag global con prefix-scoping para limpieza de migración.
  */
-const TOUR_SEEN_KEY_PREFIX = 'preauth.tour.seen';
-const TOUR_SEEN_ANON_SUFFIX = 'anon';
-
-function tourSeenKey(userId: string | null | undefined): string {
-  const suffix = userId && userId.length > 0 ? userId : TOUR_SEEN_ANON_SUFFIX;
-  return `${TOUR_SEEN_KEY_PREFIX}.${suffix}`;
-}
+const TOUR_SEEN_KEY = 'preauth.tour.seen';
+const LEGACY_KEY_PREFIX = 'preauth.tour.seen.';
 
 @Injectable({ providedIn: 'root' })
 export class TourService {
@@ -147,9 +154,6 @@ export class TourService {
    */
   private aborted = false;
 
-  /** UserId activo durante la corrida del tour — usado para scope de markSeen(). */
-  private currentUserId: string | null = null;
-
   /**
    * Cache del módulo driver.js. Se carga lazy la primera vez que se llama
    * a `start()` para que el bundle inicial no incluya driver.js (~20 KB
@@ -161,14 +165,33 @@ export class TourService {
   readonly active = signal(false);
 
   /**
-   * ¿El usuario `userId` ya vio el tour en este browser?
-   * Si `userId` es null/undefined cae a un scope anónimo — sigue siendo
-   * mejor que el flag global porque queda separado de cualquier user id.
+   * ¿Ya se vio el tour en este browser?
+   *
+   * El parámetro `userId` queda en la firma por compatibilidad con
+   * `app.ts`/`topbar.ts` pero ya NO se usa para scoping — el flag es
+   * global, así que el tour solo aparece una vez aunque el operador
+   * cambie de rol o haga re-login con otro demo user. Compatibilidad
+   * con flags legacy (`preauth.tour.seen.<id>`): si algún user ya tiene
+   * uno set, asumimos que ya lo vio (no auto-disparar de nuevo).
    */
-  hasBeenSeen(userId: string | null | undefined = null): boolean {
+  hasBeenSeen(_userId?: string | null): boolean {
     if (typeof window === 'undefined') return false;
     try {
-      return window.localStorage.getItem(tourSeenKey(userId)) === '1';
+      if (window.localStorage.getItem(TOUR_SEEN_KEY) === '1') {
+        return true;
+      }
+      // Backward-compat: algún flag legacy con prefix indica que el tour
+      // ya se vio (no queremos re-disparar tras una migración del key).
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith(LEGACY_KEY_PREFIX)) {
+          // Migración suave: promovemos a la nueva key y dejamos la
+          // legacy huérfana (no la borramos para no romper otras tabs).
+          window.localStorage.setItem(TOUR_SEEN_KEY, '1');
+          return true;
+        }
+      }
+      return false;
     } catch {
       return false;
     }
@@ -179,10 +202,9 @@ export class TourService {
    * `opts.userId` se usa para scope del flag "tour seen" (evita que un
    * usuario en una shared workstation herede el flag de otro).
    */
-  async start(opts?: { userId?: string | null }): Promise<void> {
+  async start(_opts?: { userId?: string | null }): Promise<void> {
     if (this.instance !== null) return;
     this.aborted = false;
-    this.currentUserId = opts?.userId ?? null;
     this.active.set(true);
 
     // Lazy load: driver.js solo se descarga cuando el usuario abre el tour
@@ -225,7 +247,6 @@ export class TourService {
       },
       onDestroyed: () => {
         this.instance = null;
-        this.currentUserId = null;
         this.active.set(false);
         this.markSeen();
       },
@@ -244,10 +265,18 @@ export class TourService {
   }
 
   /** Resetea el flag "tour seen" — útil para devs que quieran ver el tour de nuevo. */
-  resetSeenFlag(userId?: string | null): void {
+  resetSeenFlag(_userId?: string | null): void {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.removeItem(tourSeenKey(userId ?? null));
+      window.localStorage.removeItem(TOUR_SEEN_KEY);
+      // También limpiamos cualquier legacy `preauth.tour.seen.<id>` que
+      // pudiera quedar de versiones anteriores.
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith(LEGACY_KEY_PREFIX)) keysToRemove.push(key);
+      }
+      keysToRemove.forEach((k) => window.localStorage.removeItem(k));
     } catch {
       // No-op: storage deshabilitado.
     }
@@ -367,7 +396,7 @@ export class TourService {
   private markSeen(): void {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(tourSeenKey(this.currentUserId), '1');
+      window.localStorage.setItem(TOUR_SEEN_KEY, '1');
     } catch {
       // No-op.
     }
