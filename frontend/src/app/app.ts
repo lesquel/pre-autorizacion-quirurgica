@@ -28,6 +28,14 @@ const ROLE_PREFIXES = ['hospital', 'insurer', 'auditor'] as const satisfies read
  *   el rol en el RoleService.
  *
  * El loop se corta con las guardas `=== role` antes de cada acción.
+ *
+ * Notas DI:
+ * - Inyectamos las clases concretas (Http*Repository) porque algunos
+ *   `loadAll()` / `list()` viven solo en la implementación HTTP, no en el
+ *   port abstracto (concerns de bootstrap, no de dominio).
+ * - Para que esa instancia sea la MISMA que el resto de la app consume vía
+ *   los ports abstractos, `app.config.ts` aliasea con `useExisting`. Sin
+ *   ese alias, Angular crea dos instancias y los signals divergen.
  */
 @Component({
   selector: 'app-root',

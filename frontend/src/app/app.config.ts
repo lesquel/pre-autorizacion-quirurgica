@@ -22,18 +22,34 @@ import { HttpInsurerRepository } from './features/policies/infrastructure/repos/
 import { ProcedureRepository } from './shared/domain/ports/procedure-repository.port';
 import { HttpProcedureRepository } from './shared/infrastructure/repos/http-procedure.repository';
 
+/**
+ * Composition root.
+ *
+ * Para los repos HTTP usamos `useExisting` en vez de `useClass`. Razón:
+ * las clases concretas ya están registradas como providers globales vía
+ * `@Injectable({ providedIn: 'root' })`. Si además declaráramos
+ * `{ provide: AbstractPort, useClass: HttpImpl }` Angular crearía DOS
+ * instancias — una para `HttpImpl` y otra para `AbstractPort` — y los
+ * signals internos divergirían (un consumer que inyecte la clase concreta
+ * vería un signal, otro que inyecte el port abstracto vería otro distinto).
+ *
+ * Con `useExisting`, el token abstracto resuelve a la MISMA instancia que
+ * la clase concreta. Eso garantiza que cualquier `loadAll()` invocado vía
+ * la clase concreta (ej. en `App` para bootstrap) actualice el signal que
+ * los use cases / facades leen vía el port abstracto.
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
     provideHttpClient(withFetch(), withInterceptors([authInterceptor, errorInterceptor])),
-    { provide: AuthRepository, useClass: HttpAuthRepository },
-    { provide: TokenStore, useClass: SessionStorageTokenStore },
-    { provide: CaseRepository, useClass: HttpCaseRepository },
-    { provide: AgentOrchestrator, useClass: HttpAgentAdapter },
-    { provide: PolicyRepository, useClass: HttpPolicyRepository },
-    { provide: CoverageRepository, useClass: HttpCoverageRepository },
-    { provide: InsurerRepository, useClass: HttpInsurerRepository },
-    { provide: ProcedureRepository, useClass: HttpProcedureRepository },
+    { provide: AuthRepository, useExisting: HttpAuthRepository },
+    { provide: TokenStore, useExisting: SessionStorageTokenStore },
+    { provide: CaseRepository, useExisting: HttpCaseRepository },
+    { provide: AgentOrchestrator, useExisting: HttpAgentAdapter },
+    { provide: PolicyRepository, useExisting: HttpPolicyRepository },
+    { provide: CoverageRepository, useExisting: HttpCoverageRepository },
+    { provide: InsurerRepository, useExisting: HttpInsurerRepository },
+    { provide: ProcedureRepository, useExisting: HttpProcedureRepository },
   ],
 };
